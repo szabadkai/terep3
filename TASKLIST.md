@@ -1,0 +1,282 @@
+# Terep3 Tasklist
+
+> Generated from `ROADMAP.md` and current codebase state (2026-05-28).
+
+Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
+
+---
+
+## Phase 1: Physics Correctness
+
+### Suspension & Contact
+- [x] Spring/damper suspension model with per-vehicle tuning (`solveSuspension`, `suspension` spec field)
+- [x] Four-wheel contact ground-height sampling with tire-profile footprint (`getWheelContactGroundHeight`)
+- [x] Contact-plane attitude calculation driving pitch/roll (`calculateContactPlaneAttitude`, `fitContactPlane`)
+- [x] Body height clamped between lowest-allowed and highest-allowed bounds
+- [x] Suspension travel tracked per-frame and used for damage estimation
+- [ ] **Tune suspension on diagonal/cross-axle terrain** — current model works on pure slopes but may need asymmetric damping for crossed-up wheel pairs (one front, opposite rear)
+- [ ] **Add anti-roll bar simulation** — reduces excessive body lean on side slopes without affecting single-wheel bump compliance
+
+### Airborne & Landing
+- [x] Airborne state detection (body too high + not rising fast enough to re-contact)
+- [x] Gravity simulation during air time (constant -19.5 m/s²)
+- [x] Reconnection gate when body drops below target height + 0.12 margin
+- [x] Pitch/roll continues evolving in air (velocity-based)
+- [ ] **Tune jump takeoff from crests** — the car currently may not launch cleanly off sharp ridges; consider adding a velocity-ramp boost when all wheels lose contact at speed
+- [ ] **Landing absorption** — add a brief landing-compression multiplier that dampens the first frame of ground contact more aggressively to prevent bouncing
+
+### Rollover & Flip Dynamics
+- [x] Rollover risk accumulates from combined roll stress, lateral stress, and speed stress (`calculateRolloverRisk`)
+- [x] Overturned state locks roll to extreme angle and disables controls
+- [x] Recovery: R key sets vehicle upright with zero velocity at average wheel ground height
+- [ ] **Flip detection on side slopes** — currently requires speed; add static tip-over when CG is outside wheelbase on steep terrain even at rest
+- [ ] **Recovery animation/transition** — the instant snap to upright is jarring; add a brief 0.3s lerp or camera transition
+
+### Torque, Grip, Braking
+- [x] Drive force with hill-torque compensation (`hillTorque` based on speed ratio)
+- [x] Lateral grip proportional to vehicle grip stat and surface grip multiplier
+- [x] Braking force at 20 units (no brake on reverse intent)
+- [x] Drag from surface + damage penalty
+- [x] Gradient force (gravity on slopes, 13 units)
+- [ ] **Hill-climb tuning pass** — current `climbs a repeatable grass test hill` test passes but real hills may feel weak; test on max-terrain-gradient locations (ridge areas) and adjust `hillTorque` multiplier
+- [ ] **Handbrake / slide mechanic** — add a dedicated handbrake input that locks rear wheels for tighter turns
+
+### Regression Tests
+- [x] Forward acceleration test
+- [x] Steering speed-dependence test
+- [x] Right-turn convention test (negative steering)
+- [x] Terrain boundary clamping test
+- [x] Lateral grip damping test
+- [x] Surface traction comparison (water vs rock)
+- [x] Hill-climb validation test
+- [x] Braking test
+- [x] Suspension body-height test
+- [x] Airborne state entry test
+- [x] Rollover test
+- [x] Recovery test
+- [x] Contact plane pitch/roll derivation test
+- [x] Tire footprint above terrain test
+- [ ] **Add brake-reverse transition test** — verify that brake input does NOT produce reverse drive force when car is moving forward at speed
+- [ ] **Add ground contact loss/reconnect cycle test** — verify the car re-grounds correctly after a small jump
+
+---
+
+## Phase 2: Terrain Visuals
+
+### Texture & Coloring
+- [x] World-space / tile-space coloring via `getTerrainPixelColor` (no UV textures, no banding)
+- [x] Cell-based noise for color variety (`seededTerrainNoise` with three layered noise channels)
+- [x] Surface-type tinting (grass, mud, rock, snow, water)
+- [x] Surface-type-specific shading patterns (`getSurfaceShade`)
+- [x] `flatShading: true` for chunky retro look
+- [x] `DoubleSide` rendering — no backface culling issues
+- [ ] **Eliminate visible cell-grid seams** — the 3.2-unit cell size creates visible edges at certain distances; consider overlapping cell edges or adding a second octave of noise at a different scale
+- [ ] **Water surface flatness** — water areas currently follow the same terrain height function; consider making water cells perfectly flat or adding a subtle wave shader for the "water cut" feel mentioned in the Gate Hunt description
+
+### Surface Distinction
+- [x] Five surface types with distinct colors and shading
+- [x] Terrain color-distance test verifies surfaces are visually distinct (>0.16 color distance)
+- [ ] **Mud vs grass readability at distance** — mud is darker brown, grass is olive green; verify from chase camera that these remain distinguishable at 50-100m
+- [ ] **Snow-ridge edge blending** — snow currently appears where `ridge > 0.75 && z > 10`; add a transition zone (0.65-0.75) with lerp blending instead of sharp cutoff
+
+### Camera Validation
+- [x] Three camera views: chase, slope, close-up
+- [x] Camera target is always above body height (not ground plane)
+- [ ] **Terrain LOD or distance fog tuning** — fog starts at 110 and ends at 310; verify that terrain is still readable from the slope camera at typical chase distances
+- [ ] **Shadow map coverage** — sun shadow camera is 300x300; verify shadows don't cut off visibly at any camera angle near terrain edges
+
+---
+
+## Phase 3: Vehicle Art Pass
+
+### Body Shape
+- [x] Multi-section body: main hull, hood panel, rear panel, cabin, skid plate
+- [x] Fenders per wheel position
+- [x] Front and rear bumpers
+- [x] Rear wing and tail details
+- [ ] **Narrow the body profile** — current `topHalfWidth` ranges from 0.82 to 1.18; target should be closer to 0.72-1.02 to match the "narrow, race-machine" description
+- [ ] **Slope the hood more aggressively** — the hood panel connects z=2.7 to z=0.75 with only 0.46-unit drop; increase slope to make the front read as lower and more aggressive
+- [ ] **Raise and compact the cabin** — cabin roof is at y=1.28; consider raising slightly (1.4) and shortening the cabin length to emphasize the off-road machine silhouette
+- [ ] **Add visible suspension arms** — simple low-poly A-arms or trailing arms connecting chassis to wheel hubs; currently wheels float at their positions
+
+### Wheel & Tire Details
+- [x] Cylindrical tires with 12 segments and textured material
+- [x] Visible hubs with contrasting yellow color
+- [x] Wheel spin animation based on speed
+- [x] Steering angle applied to front wheels (0.45 rad max)
+- [x] Suspension compression visually moves wheels up/down
+- [x] Camber simulation from compression
+- [ ] **Add tire tread texture** — current tire uses the generic dark trim material; create a dedicated tire texture with visible tread blocks
+- [ ] **Make hub geometry more detailed** — current hub is a simple cylinder; add spokes or a star pattern for recognizable wheel-hub identity
+- [ ] **Tire sidewall height** — tires are purely cylindrical; add a slight sidewall bulge or profile variation
+
+### Decals & Number Panels
+- [x] Number panels on both sides (number "13")
+- [x] Panel texture with pixel-art base/dark/light colors
+- [ ] **Add race number to hood or roof** — current numbers are only on side panels; put the number on the hood for top-down readability
+- [ ] **Sponsor/decal stripe geometry** — add a simple colored stripe or band across the body sides using a polygon strip rather than floating geometry
+- [ ] **Make number panel conform to body curvature** — current panels are flat quads at fixed lateral offset; they should bend slightly to follow the hull's taper
+
+### Visual Cleanup
+- [ ] **Audit for floating/accidental geometry** — review all child meshes of the vehicle rig; remove any that read as construction artifacts
+- [ ] **Ensure consistent material roughness** — body (0.84), accent (0.72), cage (0.9), glass (0.68), trim (0.92); decide on a cohesive range and keep materials within it
+- [ ] **Wheel-well clearance check** — verify wheels don't clip through fenders at maximum compression + steering angle
+
+---
+
+## Phase 4: Gate Hunt Gameplay
+
+### Gate Detection & Routing
+- [x] Six gates (A-F) placed across the terrain
+- [x] Gate detection at 4.2-unit radius
+- [x] Sequential progression: A→B→C→D→E→F→(loop to A)
+- [x] Run completion tracking with `completedRuns` counter
+- [ ] **Add gate-approach feedback sound or visual pulse** — currently only the arrow marker and gate color change indicate proximity; add a subtle pulse ring or beep when within 10 units
+- [ ] **Prevent gate double-triggering** — add a cooldown (0.5s minimum between gate triggers) or require exiting the detection radius before re-entering triggers the next gate
+
+### Timing & Scoring
+- [x] `elapsedSeconds` tracking with delta accumulation
+- [x] `bestSeconds` persistence across runs
+- [x] `lastRunSeconds` for last-completion display
+- [x] `bestTimeImproved` flag for UI feedback
+- [x] Time format: `M:SS.S`
+- [ ] **Add split times** — record time at each individual gate for post-run display; helps players identify which segments to improve
+- [ ] **Display best time prominently** — currently best time is shown in the race strip; add a larger callout or persistent on-screen display during runs
+
+### In-World Feedback
+- [x] Direction arrow marker with pulse animation and heading rotation
+- [x] Gate post/banner color changes when active (yellow vs blue)
+- [x] Arrow scales up on best-time-improved runs
+- [x] Arrow hides when within 6 units of gate
+- [ ] **Add gate number floating label** — a small "A", "B", etc. label visible above or near the gate in-world
+- [ ] **Add completion celebration** — brief particle burst, camera flash, or color change when a run is completed and best time is improved
+- [ ] **Active gate pulse beacon** — make the active gate emit a subtle light or have a visible beacon above it for long-distance orientation
+
+### Reset & Retry
+- [x] `resetGateHuntRun` resets gate index, time, and progress while preserving history
+- [x] Retry via Enter key, T key, or HUD button
+- [x] Retry signal passed from HUD to GameScene
+- [x] Direction arrow marker with heading rotation
+- [ ] **Add "start line" spawn position** — retry should optionally teleport the vehicle to a designated start position near Gate A rather than resetting in-place
+
+### HUD
+- [x] Active gate ID display
+- [x] Gate progress: cleared/total, distance, elapsed time, best time
+- [x] Run feedback: "Best run" / "Last run" display
+- [x] Completed runs counter
+- [x] Retry button in panel header
+- [ ] **Add mini route map** — a small top-down view showing gate positions and vehicle location
+- [ ] **Show next gate preview** — indicate which gate comes after the current one (e.g., "Next: C")
+
+---
+
+## Phase 5: Damage, Flips, and Recovery
+
+### Damage System
+- [x] `estimateImpactDamage` from slope hits and suspension bottom-outs
+- [x] Damage affects vehicle drag (`state.damage * 0.012` added to drag)
+- [x] Damage clamped to 0-100 range
+- [ ] **Differentiate damage types** — separate cosmetic damage from mechanical damage; cosmetic affects visuals only, mechanical affects handling (slower acceleration, reduced grip)
+- [ ] **Damage thresholds** — at 30%: steering becomes sluggish; at 60%: engine sputters (throttle reduction); at 90%: severe limping
+- [ ] **HUD damage indicator** — show current damage as a bar or percentage in the HUD
+
+### Visual Damage
+- [ ] **Panel deformation states** — create 2-3 levels of dented geometry variants for hood, doors, and roof that swap in based on damage level
+- [ ] **Bumper detachment** — at high damage, bumpers should visibly hang or detach
+- [ ] **Broken glass** — add crack texture overlay on cabin glass at moderate damage
+- [ ] **Wheel damage visuals** — bent wheel geometry or wobble animation at high damage
+- [ ] **Smoke/steam particles** — add engine smoke particles that increase with damage level
+
+### Flip & Roll Logic
+- [x] Rollover risk accumulation → overturn state
+- [x] Overturned vehicles cannot drive
+- [x] Recovery input (R key)
+- [ ] **Partial roll states** — distinguish between "on side" (can self-right with throttle + steering), "on roof" (needs recovery), and "end-over-end" (full flip)
+- [ ] **Roll momentum continuation** — currently once `overturned` is true, the car locks; allow the car to continue rolling through a full flip and potentially land back on wheels naturally
+
+### Recovery
+- [x] `recoverVehicle` resets position above ground with zero velocity
+- [x] Recovery preserves damage state
+- [ ] **Recovery cooldown** — prevent spamming recovery; 2-second cooldown after recovery
+- [ ] **Recovery penalty** — add a time penalty to the Gate Hunt clock on recovery (e.g., +3 seconds)
+- [ ] **Recovery animation** — brief camera shake or transition instead of instant teleport
+
+---
+
+## Phase 6: Multiplayer Readiness
+
+### State Serialization
+- [x] `ControlInput` type — throttle, brake, steering, recover
+- [x] `VehicleState` type — position, velocity, orientation, contacts, damage, airborne
+- [x] `GateHuntProgress` type — gate index, timing, runs completed
+- [x] `GameMode` type — mode ID, label, summary, player count
+- [ ] **Add network-serializable snapshot format** — define a compact binary or JSON schema for all three state types suitable for 20Hz network sync
+- [ ] **Add state checksum/delta support** — define which fields can be delta-compressed vs full-sent
+- [ ] **Input history buffer** — store last N frames of `ControlInput` for rollback netcode
+
+### Simulation Determinism
+- [ ] **Verify deterministic physics** — ensure `updateVehicleState` produces identical results given identical state, input, and delta; audit for any `Math.random()` or external state leakage
+- [ ] **Fixed-point or quantized physics option** — consider quantizing positions/velocities to fixed precision for cross-platform determinism
+- [ ] **Define authoritative reconciliation rules** — document which state fields the server overwrites vs. client-predicts
+
+### Mode Readiness
+- [x] Six game modes defined in catalog (`free-roam`, `gate-hunt`, `pathfinder`, `flag-run`, `destruction-zone`, `hill-trial`)
+- [x] Player counts specified per mode
+- [ ] **Pathfinder mode logic** — same gates, any order; implement path-finding scoring (shortest route wins)
+- [ ] **Flag Run mode logic** — flag pickup, carry, drop, return mechanics
+- [ ] **Destruction Zone scoring** — impact-angle and speed-based scoring formula
+- [ ] **Hill Trial logic** — climb-checkpoint detection, rollback penalty timer
+
+### Pre-Multiplayer Gate
+- [ ] **Single-player polish complete** — Gate Hunt loop, damage visuals, recovery all finalized (Phases 1-5 done)
+- [ ] **Evaluate networking library** — research WebRTC vs WebSocket with authoritative server for room-based multiplayer
+- [ ] **Prototype 2-player local split-screen** — validates state separation before adding network layer
+
+---
+
+## Cross-Cutting Tasks
+
+### Build & Quality
+- [x] `npm run check` pipeline: typecheck → lint → test → build
+- [x] Vitest test suite with 6 test files
+- [x] ESLint config with React hooks and refresh plugins
+- [ ] **Add CI workflow** — GitHub Actions to run `npm run check` on PRs
+- [ ] **Performance budget** — establish baseline FPS on target hardware; add frame-time regression test
+
+### Code Organization
+- [ ] **Extract physics constants to a config module** — currently spring rates (86), damping (22), gravity (19.5), gradient force (13), etc. are hardcoded in `vehicleDynamics.ts`
+- [ ] **Split `VehicleModel.ts`** — it's ~400 lines mixing body geometry, wheel animation, and material creation; separate into `VehicleBody.ts`, `VehicleWheels.ts`, `VehicleMaterials.ts`
+- [ ] **Add JSDoc to public APIs** — `updateVehicleState`, `updateGateHuntProgress`, `getGameplayCameraPose`, `getSurfaceForPoint`
+
+### Accessibility
+- [ ] **Keyboard remapping** — extract key bindings to a config constant so players can customize controls
+- [ ] **Gamepad support** — add Gamepad API input reader alongside keyboard controls
+- [ ] **Colorblind terrain mode** — add pattern-based (not color-only) surface differentiation option
+
+---
+
+## Summary
+
+| Phase | Done | Partial | Remaining | Total |
+|-------|------|---------|-----------|-------|
+| Phase 1: Physics | 12 | 0 | 8 | 20 |
+| Phase 2: Terrain | 7 | 1 | 4 | 12 |
+| Phase 3: Vehicle Art | 11 | 0 | 13 | 24 |
+| Phase 4: Gate Hunt | 13 | 1 | 10 | 24 |
+| Phase 5: Damage/Flips | 5 | 0 | 18 | 23 |
+| Phase 6: Multiplayer | 6 | 0 | 14 | 20 |
+| Cross-cutting | 3 | 0 | 8 | 11 |
+| **Total** | **57** | **2** | **75** | **134** |
+
+**Overall completion: ~44%** of the full-scope tasklist is done.
+
+### Recommended Priority Order
+
+1. **Phase 1 remaining** — physics tuning is foundational; everything else depends on good driving feel
+2. **Phase 3 body narrowing + hood slope** — quick geometry changes with high visual impact
+3. **Phase 4 gate feedback polish** — Gate Hunt is the flagship mode; make it shine
+4. **Phase 5 damage visuals** — adds game-feel payoff for crashes that already exist in the physics
+5. **Phase 2 terrain edge blending** — smooth out the few remaining visual artifacts
+6. **Phase 5 recovery polish** — cooldown, penalty, animation
+7. **Cross-cutting cleanup** — extract constants, add CI
+8. **Phase 6 pre-multiplayer prep** — only after everything above is stable
