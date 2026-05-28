@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { createPanelTexture } from '../../game/pixelTextures';
 import { terrainHeight } from '../../game/terrain';
-import { updateVehicleState } from '../../game/vehicleDynamics';
+import { getWheelContactGroundHeight, updateVehicleState } from '../../game/vehicleDynamics';
 import { wheelLayout, wheelRadius } from '../../game/wheelLayout';
 
 export type VehicleRig = THREE.Group & {
@@ -91,12 +91,19 @@ export function animateVehicleRig(
     const axleHop = Math.sin(frameTime * 0.016 + index * 1.9) * Math.min(0.035, Math.abs(state.speed) * 0.0012);
     const steerAngle = wheelLayout[index]?.steering ? steering * 0.45 : 0;
     const camber = contact.compression * offset.x * 0.08;
+    const worldX = state.x + Math.cos(state.yaw) * offset.x + Math.sin(state.yaw) * offset.z;
+    const worldZ = state.z - Math.sin(state.yaw) * offset.x + Math.cos(state.yaw) * offset.z;
+    const wheelTilt = Math.min(0.7, Math.hypot(visualPitch * 0.38, visualRoll + camber));
+    const tiltClearance = rigWheelRadius * (1 - Math.cos(wheelTilt)) + 0.08;
+    const minimumWheelHeight =
+      getWheelContactGroundHeight(worldX, worldZ, state.yaw + steerAngle, tiltClearance) + rigWheelRadius;
 
     wheelSpin[index] = (wheelSpin[index] - state.speed * deltaSeconds * 2.8) % (Math.PI * 2);
     const suspensionDrop = state.airborne ? -0.42 : 0;
-    const wheelHeight = state.airborne
+    const targetWheelHeight = state.airborne
       ? visualBodyHeight - 0.88 + suspensionDrop
       : contact.groundHeight + rigWheelRadius + axleHop;
+    const wheelHeight = Math.max(targetWheelHeight, minimumWheelHeight);
 
     wheel.position.set(offset.x, wheelHeight, offset.z);
     wheel.rotation.set(visualPitch * 0.38, steerAngle, visualRoll + camber, 'YXZ');

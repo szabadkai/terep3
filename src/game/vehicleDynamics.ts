@@ -7,6 +7,7 @@ export type ControlInput = {
   readonly throttle: number;
   readonly brake: number;
   readonly steering: number;
+  readonly recover?: boolean;
 };
 
 export type VehicleState = {
@@ -24,6 +25,8 @@ export type VehicleState = {
   readonly airborne: boolean;
   readonly speed: number;
   readonly damage: number;
+  readonly rolloverRisk: number;
+  readonly overturned: boolean;
 };
 
 export type WheelContact = {
@@ -51,6 +54,8 @@ export const initialVehicleState: VehicleState = {
   airborne: false,
   speed: 0,
   damage: 0,
+  rolloverRisk: 0,
+  overturned: false,
 };
 
 export function updateVehicleState(
@@ -59,6 +64,10 @@ export function updateVehicleState(
   vehicle: VehicleSpec,
   deltaSeconds: number,
 ): VehicleState {
+  if (input.recover && state.overturned) {
+    return recoverVehicle(state);
+  }
+
   const surface = getSurfaceForPoint(state.x, state.z);
   const traction = clamp(surface.gripMultiplier * (vehicle.grip / 8), 0.2, 1.25);
   const forwardX = Math.sin(state.yaw);
@@ -68,11 +77,13 @@ export function updateVehicleState(
   const forwardSpeed = state.velocityX * forwardX + state.velocityZ * forwardZ;
   const sideSpeed = state.velocityX * rightX + state.velocityZ * rightZ;
   const reverseIntent = input.brake > 0 && forwardSpeed < 2.4;
+  const disabledControlScale = state.overturned ? 0 : 1;
   const brakeForce = reverseIntent ? 0 : input.brake * 20;
   const hillTorque = input.throttle * vehicle.acceleration * clamp(1 - Math.abs(forwardSpeed) / 24, 0.2, 1) * 0.95;
   const driveForce =
     (input.throttle * vehicle.acceleration * 1.34 + hillTorque - Number(reverseIntent) * vehicle.acceleration * 0.72) *
-    traction;
+    traction *
+    disabledControlScale;
   const lateralGrip = clamp(7.5 + vehicle.grip * 0.8 - Math.abs(forwardSpeed) * 0.045, 3.5, 13) * traction;
   const gradient = terrainGradient(state.x, state.z);
   const drag = surface.drag + state.damage * 0.012;
@@ -99,7 +110,15 @@ export function updateVehicleState(
   const steerSpeedFactor = clamp(speed / 10, 0.18, 1);
   const slidePenalty = clamp(1 - Math.abs(sideSpeed) / 36, 0.42, 1);
   const yaw =
-    state.yaw + input.steering * steerSpeedFactor * traction * slidePenalty * Math.sign(signedSpeed || 1) * 2.75 * deltaSeconds;
+    state.yaw +
+    input.steering *
+      disabledControlScale *
+      steerSpeedFactor *
+      traction *
+      slidePenalty *
+      Math.sign(signedSpeed || 1) *
+      2.75 *
+      deltaSeconds;
   const x = state.x + velocityX * deltaSeconds;
   const z = state.z + velocityZ * deltaSeconds;
   const boundedX = clamp(x, -playableHalfSize, playableHalfSize);
@@ -114,6 +133,10 @@ export function updateVehicleState(
   }
 
   const suspension = solveSuspension(state, boundedX, boundedZ, velocityX, velocityZ, yaw, vehicle, deltaSeconds);
+  const rolloverRisk = calculateRolloverRisk(state, suspension, sideSpeed, speed, deltaSeconds);
+  const overturned = state.overturned || rolloverRisk >= 1;
+  const resolvedPitch = overturned ? lerp(suspension.pitch, Math.sign(suspension.pitch || state.pitch || 1) * 1.1, 0.55) : suspension.pitch;
+  const resolvedRoll = overturned ? Math.sign(suspension.roll || state.roll || sideSpeed || 1) * 2.55 : suspension.roll;
   const damage = clamp(state.damage + estimateImpactDamage(state, boundedX, boundedZ, speed, suspension.suspensionTravel), 0, 100);
 
   return {
@@ -124,18 +147,42 @@ export function updateVehicleState(
     velocityZ,
     bodyHeight: suspension.bodyHeight,
     verticalVelocity: suspension.verticalVelocity,
-    pitch: suspension.pitch,
-    roll: suspension.roll,
+    pitch: resolvedPitch,
+    roll: resolvedRoll,
     suspensionTravel: suspension.suspensionTravel,
     wheelContacts: suspension.wheelContacts,
-    airborne: suspension.airborne,
+    airborne: overturned ? false : suspension.airborne,
     speed: signedSpeed,
     damage,
+    rolloverRisk: overturned ? 1 : rolloverRisk,
+    overturned,
   };
 }
 
 export function getVehicleAltitude(state: VehicleState) {
   return state.bodyHeight;
+}
+
+function recoverVehicle(state: VehicleState): VehicleState {
+  const wheelContacts = makeWheelContacts(state.x, state.z, state.yaw);
+  const averageWheelGround =
+    wheelContacts.reduce((total, contact) => total + contact.groundHeight, 0) / wheelContacts.length;
+
+  return {
+    ...state,
+    velocityX: 0,
+    velocityZ: 0,
+    bodyHeight: averageWheelGround + wheelRadius + suspensionRestLength,
+    verticalVelocity: 0,
+    pitch: 0,
+    roll: 0,
+    suspensionTravel: 0,
+    wheelContacts,
+    airborne: false,
+    speed: 0,
+    rolloverRisk: 0,
+    overturned: false,
+  };
 }
 
 function solveSuspension(
@@ -292,6 +339,27 @@ function estimateImpactDamage(previous: VehicleState, x: number, z: number, spee
   }
 
   return slopeHit * Math.abs(speed) * 0.014 + bottomOut * Math.abs(speed) * 0.035;
+}
+
+function calculateRolloverRisk(
+  previous: VehicleState,
+  suspension: ReturnType<typeof solveSuspension>,
+  sideSpeed: number,
+  speed: number,
+  deltaSeconds: number,
+) {
+  if (previous.overturned) {
+    return 1;
+  }
+
+  const rollStress = Math.max(0, (Math.abs(suspension.roll) - 0.24) / 0.12);
+  const pitchStress = Math.max(0, (Math.abs(suspension.pitch) - 0.28) / 0.12);
+  const lateralStress = Math.max(0, (Math.abs(sideSpeed) - 9) / 18);
+  const speedStress = Math.max(0, (speed - 18) / 22);
+  const accumulating = (rollStress * lateralStress * 1.45 + pitchStress * speedStress * 0.82) * deltaSeconds;
+  const recovering = (suspension.airborne ? 0.08 : 0.42) * deltaSeconds;
+
+  return clamp(previous.rolloverRisk + accumulating - recovering, 0, 1.1);
 }
 
 function lerp(start: number, end: number, amount: number) {

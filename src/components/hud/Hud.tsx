@@ -22,7 +22,7 @@ export function Hud({ modes, vehicles, gateHuntProgress }: HudProps) {
           <button type="button" className="icon-button" aria-label="Network play planned">
             <RadioTower size={19} />
           </button>
-          <a className="icon-button" href="https://github.com/lszabadkai/terep3" aria-label="GitHub repository">
+          <a className="icon-button" href="https://github.com/szabadkai/terep3" aria-label="GitHub repository">
             <Code2 size={19} />
           </a>
         </div>
@@ -89,7 +89,7 @@ export function Hud({ modes, vehicles, gateHuntProgress }: HudProps) {
 
       <footer className="hud__footer">
         <span>WASD / arrows</span>
-        <span>free camera chase</span>
+        <span>R recover</span>
       </footer>
     </section>
   );

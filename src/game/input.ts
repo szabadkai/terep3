@@ -21,10 +21,12 @@ export function readKeyboardInput(): ControlInput {
   const reverse = activeKeys.has('s') || activeKeys.has('arrowdown');
   const left = activeKeys.has('a') || activeKeys.has('arrowleft');
   const right = activeKeys.has('d') || activeKeys.has('arrowright');
+  const recover = activeKeys.has('r');
 
   return {
     throttle: forward ? 1 : 0,
     brake: reverse ? 1 : 0,
     steering: Number(left) - Number(right),
+    recover,
   };
 }

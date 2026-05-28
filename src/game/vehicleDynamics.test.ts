@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { playableHalfSize, terrainHeight } from './terrain';
-import { calculateContactPlaneAttitude, initialVehicleState, updateVehicleState, type WheelContact } from './vehicleDynamics';
+import {
+  calculateContactPlaneAttitude,
+  getWheelContactGroundHeight,
+  initialVehicleState,
+  updateVehicleState,
+  type WheelContact,
+} from './vehicleDynamics';
 import { vehicleCatalog } from './vehicles';
+import { wheelRadius } from './wheelLayout';
 
 describe('updateVehicleState', () => {
   it('accelerates forward when throttle is applied', () => {
@@ -93,6 +100,51 @@ describe('updateVehicleState', () => {
     expect(next.verticalVelocity).toBeLessThan(2.4);
   });
 
+  it('can roll over on steep terrain under enough speed stress', () => {
+    const next = updateVehicleState(
+      {
+        ...initialVehicleState,
+        x: 18,
+        z: -27,
+        yaw: 3.6,
+        velocityX: -18,
+        velocityZ: -36,
+        speed: 40,
+        rolloverRisk: 0.82,
+      },
+      { throttle: 1, brake: 0, steering: 0 },
+      vehicleCatalog[0],
+      1,
+    );
+
+    expect(next.overturned).toBe(true);
+    expect(Math.abs(next.roll)).toBeGreaterThan(1);
+    expect(next.airborne).toBe(false);
+  });
+
+  it('recovers an overturned vehicle onto its wheels', () => {
+    const next = updateVehicleState(
+      {
+        ...initialVehicleState,
+        velocityX: 12,
+        velocityZ: -4,
+        speed: 12,
+        roll: 2.55,
+        rolloverRisk: 1,
+        overturned: true,
+      },
+      { throttle: 0, brake: 0, steering: 0, recover: true },
+      vehicleCatalog[0],
+      0.16,
+    );
+
+    expect(next.overturned).toBe(false);
+    expect(next.rolloverRisk).toBe(0);
+    expect(next.speed).toBe(0);
+    expect(next.roll).toBe(0);
+    expect(next.bodyHeight).toBeGreaterThan(terrainHeight(next.x, next.z) + wheelRadius);
+  });
+
   it('derives pitch and roll from a diagonal four-wheel contact plane', () => {
     const contacts: readonly WheelContact[] = [
       makeContact('front-left', -1, 1, 0.1),
@@ -119,6 +171,29 @@ describe('updateVehicleState', () => {
 
     expect(attitude.roll).toBeGreaterThan(0);
     expect(Math.abs(attitude.pitch)).toBeLessThan(0.01);
+  });
+
+  it('keeps the tire footprint above nearby terrain samples', () => {
+    const x = -42;
+    const z = -33;
+    const yaw = 0.64;
+    const axleHeight = getWheelContactGroundHeight(x, z, yaw) + wheelRadius;
+    const forwardX = Math.sin(yaw);
+    const forwardZ = Math.cos(yaw);
+    const sideX = Math.cos(yaw);
+    const sideZ = -Math.sin(yaw);
+    const forwardOffsets = [-0.92, -0.46, 0, 0.46, 0.92].map((amount) => amount * wheelRadius);
+    const sideOffsets = [-0.36, 0, 0.36];
+
+    forwardOffsets.forEach((forwardOffset) => {
+      sideOffsets.forEach((sideOffset) => {
+        const sampleX = x + forwardX * forwardOffset + sideX * sideOffset;
+        const sampleZ = z + forwardZ * forwardOffset + sideZ * sideOffset;
+        const tireProfileHeight = Math.sqrt(Math.max(0, wheelRadius * wheelRadius - forwardOffset * forwardOffset));
+
+        expect(axleHeight - tireProfileHeight).toBeGreaterThan(terrainHeight(sampleX, sampleZ));
+      });
+    });
   });
 });
 
