@@ -4,6 +4,21 @@ import type { GameplayCameraView } from './gameplayCamera';
 const activeKeys = new Set<string>();
 const pressedKeys = new Set<string>();
 
+export const keyBindings = {
+  throttle: ['w', 'arrowup'],
+  brake: ['s', 'arrowdown'],
+  steerLeft: ['a', 'arrowleft'],
+  steerRight: ['d', 'arrowright'],
+  recover: ['r'],
+  handbrake: [' '],
+  retry: ['enter', 't'],
+  cameraViews: {
+    chase: ['1'],
+    slope: ['2'],
+    close: ['3'],
+  },
+} as const;
+
 export function bindKeyboardControls() {
   const keydown = (event: KeyboardEvent) => {
     const key = event.key.toLowerCase();
@@ -27,12 +42,12 @@ export function bindKeyboardControls() {
 }
 
 export function readKeyboardInput(): ControlInput {
-  const forward = activeKeys.has('w') || activeKeys.has('arrowup');
-  const reverse = activeKeys.has('s') || activeKeys.has('arrowdown');
-  const left = activeKeys.has('a') || activeKeys.has('arrowleft');
-  const right = activeKeys.has('d') || activeKeys.has('arrowright');
-  const recover = activeKeys.has('r');
-  const handbrake = activeKeys.has(' ') ? 1 : 0;
+  const forward = hasActiveKey(keyBindings.throttle);
+  const reverse = hasActiveKey(keyBindings.brake);
+  const left = hasActiveKey(keyBindings.steerLeft);
+  const right = hasActiveKey(keyBindings.steerRight);
+  const recover = hasActiveKey(keyBindings.recover);
+  const handbrake = hasActiveKey(keyBindings.handbrake) ? 1 : 0;
 
   return {
     throttle: forward ? 1 : 0,
@@ -44,15 +59,15 @@ export function readKeyboardInput(): ControlInput {
 }
 
 export function readCameraViewInput(): GameplayCameraView | undefined {
-  if (activeKeys.has('1')) {
+  if (hasActiveKey(keyBindings.cameraViews.chase)) {
     return 'chase';
   }
 
-  if (activeKeys.has('2')) {
+  if (hasActiveKey(keyBindings.cameraViews.slope)) {
     return 'slope';
   }
 
-  if (activeKeys.has('3')) {
+  if (hasActiveKey(keyBindings.cameraViews.close)) {
     return 'close';
   }
 
@@ -60,7 +75,11 @@ export function readCameraViewInput(): GameplayCameraView | undefined {
 }
 
 export function readGateHuntRetryInput() {
-  return consumePressedKey('enter') || consumePressedKey('t');
+  return keyBindings.retry.some((key) => consumePressedKey(key));
+}
+
+function hasActiveKey(keys: readonly string[]) {
+  return keys.some((key) => activeKeys.has(key));
 }
 
 function consumePressedKey(key: string) {

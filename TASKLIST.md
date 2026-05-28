@@ -56,8 +56,8 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 - [x] Recovery test
 - [x] Contact plane pitch/roll derivation test
 - [x] Tire footprint above terrain test
-- [ ] **Add brake-reverse transition test** — verify that brake input does NOT produce reverse drive force when car is moving forward at speed
-- [ ] **Add ground contact loss/reconnect cycle test** — verify the car re-grounds correctly after a small jump
+- [x] **Add brake-reverse transition test** — verify that brake input does NOT produce reverse drive force when car is moving forward at speed
+- [x] **Add ground contact loss/reconnect cycle test** — verify the car re-grounds correctly after a small jump
 
 ---
 
@@ -107,13 +107,13 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 - [x] Suspension compression visually moves wheels up/down
 - [x] Camber simulation from compression
 - [x] **Add tire tread texture** — dedicated tire material with visible tread blocks
-- [ ] **Make hub geometry more detailed** — current hub is a simple cylinder; add spokes or a star pattern for recognizable wheel-hub identity
+- [x] **Make hub geometry more detailed** — current hub is a simple cylinder; add spokes or a star pattern for recognizable wheel-hub identity
 - [ ] **Tire sidewall height** — tires are purely cylindrical; add a slight sidewall bulge or profile variation
 
 ### Decals & Number Panels
 - [x] Number panels on both sides (number "13")
 - [x] Panel texture with pixel-art base/dark/light colors
-- [ ] **Add race number to hood or roof** — current numbers are only on side panels; put the number on the hood for top-down readability
+- [x] **Add race number to hood or roof** — current numbers are only on side panels; put the number on the hood for top-down readability
 - [ ] **Sponsor/decal stripe geometry** — add a simple colored stripe or band across the body sides using a polygon strip rather than floating geometry
 - [ ] **Make number panel conform to body curvature** — current panels are flat quads at fixed lateral offset; they should bend slightly to follow the hull's taper
 
@@ -240,7 +240,7 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 - [x] `npm run check` pipeline: typecheck → lint → test → build
 - [x] Vitest test suite with 6 test files
 - [x] ESLint config with React hooks and refresh plugins
-- [ ] **Add CI workflow** — GitHub Actions to run `npm run check` on PRs
+- [x] **Add CI workflow** — GitHub Actions to run `npm run check` on PRs
 - [ ] **Performance budget** — establish baseline FPS on target hardware; add frame-time regression test
 
 ### Code Organization
@@ -249,7 +249,7 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 - [ ] **Add JSDoc to public APIs** — `updateVehicleState`, `updateGateHuntProgress`, `getGameplayCameraPose`, `getSurfaceForPoint`
 
 ### Accessibility
-- [ ] **Keyboard remapping** — extract key bindings to a config constant so players can customize controls
+- [x] **Keyboard remapping** — extract key bindings to a config constant so players can customize controls
 - [ ] **Gamepad support** — add Gamepad API input reader alongside keyboard controls
 - [ ] **Colorblind terrain mode** — add pattern-based (not color-only) surface differentiation option
 

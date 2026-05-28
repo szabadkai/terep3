@@ -187,6 +187,24 @@ describe('updateVehicleState', () => {
     expect(next.verticalVelocity).toBeGreaterThan(-5);
   });
 
+  it('reconnects to ground after a small jump cycle', () => {
+    const start = makeVehicleStateAt(-22, 34, 0);
+    let next: VehicleState = {
+      ...start,
+      airborne: true,
+      bodyHeight: start.bodyHeight + 1.3,
+      verticalVelocity: 1.4,
+    };
+
+    for (let elapsed = 0; elapsed < 1.1 && next.airborne; elapsed += 0.05) {
+      next = updateVehicleState(next, { throttle: 0, brake: 0, steering: 0 }, vehicleCatalog[0], 0.05);
+    }
+
+    expect(next.airborne).toBe(false);
+    expect(next.bodyHeight).toBeGreaterThan(terrainHeight(next.x, next.z) + wheelRadius);
+    expect(next.verticalVelocity).toBeGreaterThan(-6);
+  });
+
   it('can roll over on steep terrain under enough speed stress', () => {
     const next = updateVehicleState(
       {

@@ -34,6 +34,7 @@ export function createVehicleMesh(): VehicleRig {
 
   chassis.add(createMainHull(materials.body));
   chassis.add(createHoodPanel(materials.accent));
+  chassis.add(createHoodNumberPanel());
   chassis.add(createRearPanel(materials.accent));
   chassis.add(createCabin(materials.glass));
   chassis.add(createSkidPlate(materials.trim));
@@ -273,6 +274,21 @@ function createNumberPanel(side: -1 | 1) {
   return number;
 }
 
+function createHoodNumberPanel() {
+  const number = createPolygonMesh(
+    [
+      [-0.42, -0.19, 2.34],
+      [0.42, -0.19, 2.34],
+      [-0.5, 0.08, 1.46],
+      [0.5, 0.08, 1.46],
+    ],
+    [[0, 2, 3, 1]],
+    createNumberMaterial(),
+  );
+  number.renderOrder = 3;
+  return number;
+}
+
 function createBumpers(material: THREE.Material) {
   const bumpers = new THREE.Group();
 
@@ -340,22 +356,38 @@ function createRearDetails(accentMaterial: THREE.Material, cageMaterial: THREE.M
 
 function createWheel(tireMaterial: THREE.Material, hubMaterial: THREE.Material) {
   const wheel = new THREE.Group();
+  const spinGroup = new THREE.Group();
   const tire = new THREE.Mesh(new THREE.CylinderGeometry(wheelRadius, wheelRadius, 0.56, 12), tireMaterial);
   const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.61, 10), hubMaterial);
+  const spokeMaterial = hubMaterial.clone();
 
   tire.rotation.z = Math.PI / 2;
   hub.rotation.z = Math.PI / 2;
   tire.castShadow = true;
   hub.castShadow = true;
-  wheel.add(tire, hub);
+  spinGroup.add(tire, hub);
+
+  for (let side = -1; side <= 1; side += 2) {
+    const face = new THREE.Group();
+    face.position.x = side * 0.32;
+
+    for (let index = 0; index < 5; index += 1) {
+      const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.12, 0.48), spokeMaterial);
+      spoke.position.z = 0.14;
+      spoke.rotation.x = (index / 5) * Math.PI * 2;
+      spoke.castShadow = true;
+      face.add(spoke);
+    }
+
+    spinGroup.add(face);
+  }
+
+  wheel.add(spinGroup);
   return wheel;
 }
 
 function spinWheelMeshes(wheel: THREE.Group, spin: number) {
-  wheel.children.forEach((child) => {
-    child.rotation.x = spin;
-    child.rotation.z = Math.PI / 2;
-  });
+  wheel.children[0].rotation.x = spin;
 }
 
 function createPolygonMesh(vertices: readonly number[][], faces: readonly number[][], material: THREE.Material) {
