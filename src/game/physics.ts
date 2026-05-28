@@ -69,9 +69,23 @@ export const physics = {
   airborneVelocityThreshold: -2.2,
   /** Terrain lift speed cap for losing contact */
   airborneTerrainLiftSpeedCap: 15,
+  /** Crest launch: minimum horizontal speed before terrain drop can launch the car */
+  crestLaunchMinSpeed: 13,
+  /** Crest launch: terrain must drop away this fast before wheels lose contact */
+  crestLaunchDropSpeed: 18,
+  /** Crest launch: lower height margin used when a fast crest drops away under the wheels */
+  crestLaunchHeightMargin: 0.14,
+  /** Crest launch: upward velocity added when all contact points fall away at speed */
+  crestLaunchVelocityBoost: 2.7,
+  /** Crest launch: maximum upward boost from crests */
+  crestLaunchVelocityMax: 5.2,
 
   /** Reconnection height above target when falling back to ground */
   reconnectHeightMargin: 0.12,
+  /** Landing: extra damping on the first frame after reconnecting with ground */
+  landingDampingMultiplier: 2.15,
+  /** Landing: retained downward velocity when reconnecting after air time */
+  landingVelocityRetain: 0.34,
 
   /** Airborne pitch/roll evolution rate */
   airborneAttitudeRate: 0.0009,
@@ -150,6 +164,10 @@ export const physics = {
 
   /** Anti-roll bar stiffness (0 = none, 1 = full) */
   antiRollBarStiffness: 0.15,
+  /** Extra damping when opposite diagonal wheel pairs are crossed-up */
+  crossAxleDampingScale: 0.46,
+  /** Diagonal height difference before cross-axle damping starts */
+  crossAxleDampingThreshold: 0.18,
 
   /** Handbrake: reduces rear lateral grip (slide boost) */
   handbrakeLateralGripScale: 0.55,

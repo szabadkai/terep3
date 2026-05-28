@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { playableHalfSize, terrainHeight } from './terrain';
 import {
   calculateContactPlaneAttitude,
+  calculateDamageEffects,
   getWheelContactGroundHeight,
   initialVehicleState,
+  resetVehicleForGateHunt,
   updateVehicleState,
   type ControlInput,
   type VehicleState,
@@ -110,6 +112,14 @@ describe('updateVehicleState', () => {
     expect(next.speed).toBeLessThan(7);
   });
 
+  it('does not turn brake input into reverse force while moving forward at speed', () => {
+    const start = { ...makeVehicleStateAt(12, 90, 0), velocityX: 0, velocityZ: 18, speed: 18 };
+    const next = updateVehicleState(start, { throttle: 0, brake: 1, steering: 0 }, vehicleCatalog[0], 0.2);
+
+    expect(next.speed).toBeGreaterThan(0);
+    expect(next.speed).toBeLessThan(start.speed);
+  });
+
   it('keeps the body height above the terrain through suspension travel', () => {
     const next = updateVehicleState(
       { ...initialVehicleState, bodyHeight: initialVehicleState.bodyHeight + 3, verticalVelocity: -8 },
@@ -135,6 +145,48 @@ describe('updateVehicleState', () => {
     expect(next.verticalVelocity).toBeLessThan(2.4);
   });
 
+  it('launches from a sharp crest when the ground drops away at speed', () => {
+    const start = makeVehicleStateAt(-18, 28, 0);
+    const liftedPreviousContacts = start.wheelContacts.map((contact) => ({
+      ...contact,
+      groundHeight: contact.groundHeight + 2.4,
+    }));
+    const next = updateVehicleState(
+      {
+        ...start,
+        velocityX: 0,
+        velocityZ: 18,
+        speed: 18,
+        bodyHeight: start.bodyHeight + 0.36,
+        wheelContacts: liftedPreviousContacts,
+      },
+      { throttle: 0, brake: 0, steering: 0 },
+      vehicleCatalog[0],
+      0.05,
+    );
+
+    expect(next.airborne).toBe(true);
+    expect(next.verticalVelocity).toBeGreaterThan(0);
+  });
+
+  it('absorbs the first landing frame after reconnecting with ground contact', () => {
+    const start = makeVehicleStateAt(-22, 34, 0);
+    const next = updateVehicleState(
+      {
+        ...start,
+        airborne: true,
+        bodyHeight: start.bodyHeight + 0.08,
+        verticalVelocity: -8,
+      },
+      { throttle: 0, brake: 0, steering: 0 },
+      vehicleCatalog[0],
+      0.05,
+    );
+
+    expect(next.airborne).toBe(false);
+    expect(next.verticalVelocity).toBeGreaterThan(-5);
+  });
+
   it('can roll over on steep terrain under enough speed stress', () => {
     const next = updateVehicleState(
       {
@@ -155,6 +207,7 @@ describe('updateVehicleState', () => {
     expect(next.overturned).toBe(true);
     expect(Math.abs(next.roll)).toBeGreaterThan(1);
     expect(next.airborne).toBe(false);
+    expect(next.damage).toBeGreaterThan(0);
   });
 
   it('recovers an overturned vehicle onto its wheels', () => {
@@ -181,6 +234,46 @@ describe('updateVehicleState', () => {
     expect(next.bodyHeight).toBeGreaterThan(terrainHeight(next.x, next.z) + wheelRadius);
     expect(next.recoveryCooldown).toBeGreaterThan(0);
     expect(next.recoveryPenalty).toBe(3);
+  });
+
+  it('preserves damage when recovering an overturned vehicle', () => {
+    const next = updateVehicleState(
+      {
+        ...initialVehicleState,
+        damage: 48,
+        cosmeticDamage: 48,
+        mechanicalDamage: 36,
+        overturned: true,
+        rolloverRisk: 1,
+        recoveryCooldown: 0,
+      },
+      { throttle: 0, brake: 0, steering: 0, recover: true },
+      vehicleCatalog[0],
+      0.16,
+    );
+
+    expect(next.damage).toBe(48);
+    expect(next.cosmeticDamage).toBe(48);
+    expect(next.mechanicalDamage).toBe(36);
+  });
+
+  it('uses damage as a gentle acceleration penalty without steering or grip penalties', () => {
+    expect(calculateDamageEffects(0)).toEqual({
+      accelerationScale: 1,
+    });
+    expect(calculateDamageEffects(8).accelerationScale).toBeGreaterThan(0.95);
+    expect(calculateDamageEffects(60).accelerationScale).toBeLessThan(calculateDamageEffects(30).accelerationScale);
+    expect(calculateDamageEffects(100).accelerationScale).toBeGreaterThanOrEqual(0.55);
+  });
+
+  it('resets Gate Hunt retries to the start line with a clean vehicle', () => {
+    const next = resetVehicleForGateHunt();
+
+    expect(next.x).toBe(initialVehicleState.x);
+    expect(next.z).toBe(initialVehicleState.z);
+    expect(next.speed).toBe(0);
+    expect(next.damage).toBe(0);
+    expect(next.overturned).toBe(false);
   });
 
   it('respects recovery cooldown', () => {

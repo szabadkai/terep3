@@ -44,7 +44,7 @@ export function createVehicleMesh(): VehicleRig {
   chassis.add(createRearDetails(materials.accent, materials.cage));
 
   wheelLayout.forEach((layout) => {
-    const wheel = createWheel(materials.trim, materials.hub);
+    const wheel = createWheel(materials.tire, materials.hub);
     wheel.position.set(layout.x, terrainHeight(0, 0) + wheelRadius, layout.z);
     wheels.push(wheel);
     wheelOffsets.push(new THREE.Vector3(layout.x, 0, layout.z));
@@ -79,8 +79,8 @@ export function animateVehicleRig(
   const averageContactHeight =
     state.wheelContacts.reduce((total, contact) => total + contact.groundHeight, 0) / state.wheelContacts.length;
   const visualBodyHeight = Math.max(state.bodyHeight - 0.34, averageContactHeight + rigWheelRadius + 0.38);
-  const visualPitch = state.pitch * visualPitchScale;
-  const visualRoll = state.roll * visualRollScale;
+  const visualPitch = state.overturned ? clamp(state.pitch * 0.18, -0.24, 0.24) : state.pitch * visualPitchScale;
+  const visualRoll = state.overturned ? clamp(state.roll * 0.16, -0.42, 0.42) : state.roll * visualRollScale;
 
   chassis.position.y = visualBodyHeight;
   chassis.rotation.set(visualPitch, 0, visualRoll, 'YXZ');
@@ -148,6 +148,12 @@ function createVehicleMaterials() {
       flatShading: true,
       roughness: 0.76,
     }),
+    tire: new THREE.MeshStandardMaterial({
+      color: '#ffffff',
+      map: createTireTexture(),
+      flatShading: true,
+      roughness: 0.96,
+    }),
     trim: new THREE.MeshStandardMaterial({
       color: '#ffffff',
       map: createCarTexture('#20272b', '#060809', '#4f5a60'),
@@ -160,10 +166,10 @@ function createVehicleMaterials() {
 
 function createMainHull(material: THREE.Material) {
   const sections: readonly Section[] = [
-    { z: 2.62, topY: -0.08, bottomY: -0.5, topHalfWidth: 0.64, bottomHalfWidth: 0.92 },
-    { z: 1.2, topY: 0.34, bottomY: -0.52, topHalfWidth: 0.82, bottomHalfWidth: 1.06 },
-    { z: -0.65, topY: 0.36, bottomY: -0.5, topHalfWidth: 0.96, bottomHalfWidth: 1.1 },
-    { z: -2.45, topY: 0.02, bottomY: -0.48, topHalfWidth: 0.8, bottomHalfWidth: 0.98 },
+    { z: 2.62, topY: -0.18, bottomY: -0.5, topHalfWidth: 0.56, bottomHalfWidth: 0.82 },
+    { z: 1.2, topY: 0.24, bottomY: -0.52, topHalfWidth: 0.72, bottomHalfWidth: 0.96 },
+    { z: -0.65, topY: 0.36, bottomY: -0.5, topHalfWidth: 0.88, bottomHalfWidth: 1.02 },
+    { z: -2.45, topY: 0.02, bottomY: -0.48, topHalfWidth: 0.72, bottomHalfWidth: 0.9 },
   ];
 
   const vertices = sections.flatMap((section) => [
@@ -192,10 +198,10 @@ function createMainHull(material: THREE.Material) {
 function createHoodPanel(material: THREE.Material) {
   return createPolygonMesh(
     [
-      [-0.68, -0.12, 2.72],
-      [0.68, -0.12, 2.72],
-      [-0.86, 0.38, 0.85],
-      [0.86, 0.38, 0.85],
+      [-0.58, -0.22, 2.72],
+      [0.58, -0.22, 2.72],
+      [-0.76, 0.38, 0.85],
+      [0.76, 0.38, 0.85],
     ],
     [
       [0, 2, 3, 1],
@@ -403,6 +409,41 @@ function createCarTexture(base: string, dark: string, light: string) {
   return createPanelTexture(base, dark, light);
 }
 
+function createTireTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 96;
+  canvas.height = 96;
+  const context = canvas.getContext('2d');
+
+  if (!context) {
+    return createPanelTexture('#20272b', '#060809', '#4f5a60');
+  }
+
+  context.fillStyle = '#111619';
+  context.fillRect(0, 0, 96, 96);
+  context.fillStyle = '#30383e';
+
+  for (let y = -12; y < 108; y += 18) {
+    context.fillRect(6, y, 26, 7);
+    context.fillRect(64, y + 9, 26, 7);
+  }
+
+  context.fillStyle = '#060809';
+  for (let x = 0; x < 96; x += 16) {
+    context.fillRect(x, 0, 3, 96);
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.magFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.NearestFilter;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(2.5, 1);
+  texture.generateMipmaps = false;
+  return texture;
+}
+
 function getWheelContactPoint(x: number, z: number, yaw: number, offset: THREE.Vector3) {
   const worldX = x + Math.cos(yaw) * offset.x + Math.sin(yaw) * offset.z;
   const worldZ = z - Math.sin(yaw) * offset.x + Math.cos(yaw) * offset.z;
@@ -410,4 +451,8 @@ function getWheelContactPoint(x: number, z: number, yaw: number, offset: THREE.V
   return {
     groundHeight: terrainHeight(worldX, worldZ) + 0.04,
   };
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
 }

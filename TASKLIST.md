@@ -14,7 +14,7 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 - [x] Contact-plane attitude calculation driving pitch/roll (`calculateContactPlaneAttitude`, `fitContactPlane`)
 - [x] Body height clamped between lowest-allowed and highest-allowed bounds
 - [x] Suspension travel tracked per-frame and used for damage estimation
-- [ ] **Tune suspension on diagonal/cross-axle terrain** — current model works on pure slopes but may need asymmetric damping for crossed-up wheel pairs (one front, opposite rear)
+- [x] **Tune suspension on diagonal/cross-axle terrain** — cross-axle damping adds extra control when opposite diagonal wheel pairs are crossed-up
 - [x] **Add anti-roll bar simulation** — reduces excessive body lean on side slopes without affecting single-wheel bump compliance
 
 ### Airborne & Landing
@@ -22,8 +22,8 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 - [x] Gravity simulation during air time (constant -19.5 m/s²)
 - [x] Reconnection gate when body drops below target height + 0.12 margin
 - [x] Pitch/roll continues evolving in air (velocity-based)
-- [ ] **Tune jump takeoff from crests** — the car currently may not launch cleanly off sharp ridges; consider adding a velocity-ramp boost when all wheels lose contact at speed
-- [ ] **Landing absorption** — add a brief landing-compression multiplier that dampens the first frame of ground contact more aggressively to prevent bouncing
+- [x] **Tune jump takeoff from crests** — fast terrain drop-away now adds a bounded crest-launch boost when contact is lost
+- [x] **Landing absorption** — first frame after reconnecting gets stronger damping and reduced retained downward velocity
 
 ### Rollover & Flip Dynamics
 - [x] Rollover risk accumulates from combined roll stress, lateral stress, and speed stress (`calculateRolloverRisk`)
@@ -94,10 +94,10 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 - [x] Fenders per wheel position
 - [x] Front and rear bumpers
 - [x] Rear wing and tail details
-- [ ] **Narrow the body profile** — current `topHalfWidth` ranges from 0.82 to 1.18; target should be closer to 0.72-1.02 to match the "narrow, race-machine" description
-- [ ] **Slope the hood more aggressively** — the hood panel connects z=2.7 to z=0.75 with only 0.46-unit drop; increase slope to make the front read as lower and more aggressive
+- [x] **Narrow the body profile** — hull sections tightened to a narrower race-machine silhouette
+- [x] **Slope the hood more aggressively** — hood nose lowered and narrowed for a sharper front profile
 - [ ] **Raise and compact the cabin** — cabin roof is at y=1.28; consider raising slightly (1.4) and shortening the cabin length to emphasize the off-road machine silhouette
-- [ ] **Add visible suspension arms** — simple low-poly A-arms or trailing arms connecting chassis to wheel hubs; currently wheels float at their positions
+- [ ] **Add visible suspension arms** — simple low-poly A-arms or trailing arms connecting chassis to wheel hubs; needs a less fragmentary treatment
 
 ### Wheel & Tire Details
 - [x] Cylindrical tires with 12 segments and textured material
@@ -106,7 +106,7 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 - [x] Steering angle applied to front wheels (0.45 rad max)
 - [x] Suspension compression visually moves wheels up/down
 - [x] Camber simulation from compression
-- [ ] **Add tire tread texture** — current tire uses the generic dark trim material; create a dedicated tire texture with visible tread blocks
+- [x] **Add tire tread texture** — dedicated tire material with visible tread blocks
 - [ ] **Make hub geometry more detailed** — current hub is a simple cylinder; add spokes or a star pattern for recognizable wheel-hub identity
 - [ ] **Tire sidewall height** — tires are purely cylindrical; add a slight sidewall bulge or profile variation
 
@@ -131,8 +131,8 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 - [x] Gate detection at 4.2-unit radius
 - [x] Sequential progression: A→B→C→D→E→F→(loop to A)
 - [x] Run completion tracking with `completedRuns` counter
-- [ ] **Add gate-approach feedback sound or visual pulse** — currently only the arrow marker and gate color change indicate proximity; add a subtle pulse ring or beep when within 10 units
-- [ ] **Prevent gate double-triggering** — add a cooldown (0.5s minimum between gate triggers) or require exiting the detection radius before re-entering triggers the next gate
+- [x] **Add gate-approach feedback sound or visual pulse** — active gate beacon/pulse intensifies within 10 units
+- [x] **Prevent gate double-triggering** — cooldown prevents immediate repeat gate triggers
 
 ### Timing & Scoring
 - [x] `elapsedSeconds` tracking with delta accumulation
@@ -140,24 +140,24 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 - [x] `lastRunSeconds` for last-completion display
 - [x] `bestTimeImproved` flag for UI feedback
 - [x] Time format: `M:SS.S`
-- [ ] **Add split times** — record time at each individual gate for post-run display; helps players identify which segments to improve
-- [ ] **Display best time prominently** — currently best time is shown in the race strip; add a larger callout or persistent on-screen display during runs
+- [x] **Add split times** — record time at each individual gate for post-run display; helps players identify which segments to improve
+- [x] **Display best time prominently** — HUD now includes a dedicated best-time callout during runs
 
 ### In-World Feedback
 - [x] Direction arrow marker with pulse animation and heading rotation
 - [x] Gate post/banner color changes when active (yellow vs blue)
 - [x] Arrow scales up on best-time-improved runs
 - [x] Arrow hides when within 6 units of gate
-- [ ] **Add gate number floating label** — a small "A", "B", etc. label visible above or near the gate in-world
-- [ ] **Add completion celebration** — brief particle burst, camera flash, or color change when a run is completed and best time is improved
-- [ ] **Active gate pulse beacon** — make the active gate emit a subtle light or have a visible beacon above it for long-distance orientation
+- [x] **Add gate number floating label** — in-world sprite labels identify each gate above the posts
+- [x] **Add completion celebration** — best-time run completion triggers a deterministic burst around the vehicle
+- [x] **Active gate pulse beacon** — active gate has a pulsing beacon, translucent column, and point light for long-distance orientation
 
 ### Reset & Retry
 - [x] `resetGateHuntRun` resets gate index, time, and progress while preserving history
 - [x] Retry via Enter key, T key, or HUD button
 - [x] Retry signal passed from HUD to GameScene
 - [x] Direction arrow marker with heading rotation
-- [ ] **Add "start line" spawn position** — retry should optionally teleport the vehicle to a designated start position near Gate A rather than resetting in-place
+- [x] **Add "start line" spawn position** — retry teleports the vehicle to the Gate Hunt start position
 
 ### HUD
 - [x] Active gate ID display
@@ -165,8 +165,8 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 - [x] Run feedback: "Best run" / "Last run" display
 - [x] Completed runs counter
 - [x] Retry button in panel header
-- [ ] **Add mini route map** — a small top-down view showing gate positions and vehicle location
-- [ ] **Show next gate preview** — indicate which gate comes after the current one (e.g., "Next: C")
+- [x] **Add mini route map** — HUD shows gate positions, active gate, route line, vehicle position, and heading-to-gate line
+- [x] **Show next gate preview** — HUD callout shows the next gate after the current active target
 
 ---
 
@@ -176,9 +176,9 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 - [x] `estimateImpactDamage` from slope hits and suspension bottom-outs
 - [x] Damage affects vehicle drag (`state.damage * 0.012` added to drag)
 - [x] Damage clamped to 0-100 range
-- [ ] **Differentiate damage types** — separate cosmetic damage from mechanical damage; cosmetic affects visuals only, mechanical affects handling (slower acceleration, reduced grip)
-- [ ] **Damage thresholds** — at 30%: steering becomes sluggish; at 60%: engine sputters (throttle reduction); at 90%: severe limping
-- [ ] **HUD damage indicator** — show current damage as a bar or percentage in the HUD
+- [x] **Differentiate damage types** — separate cosmetic damage from mechanical damage; mechanical damage only applies mild acceleration/drag penalties
+- [~] **Damage thresholds** — replaced hard handling thresholds with a gentle continuous acceleration penalty
+- [x] **HUD damage indicator** — show current damage as a bar or percentage in the HUD
 
 ### Visual Damage
 - [ ] **Panel deformation states** — create 2-3 levels of dented geometry variants for hood, doors, and roof that swap in based on damage level
@@ -244,7 +244,7 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 - [ ] **Performance budget** — establish baseline FPS on target hardware; add frame-time regression test
 
 ### Code Organization
-- [ ] **Extract physics constants to a config module** — currently spring rates (86), damping (22), gravity (19.5), gradient force (13), etc. are hardcoded in `vehicleDynamics.ts`
+- [x] **Extract physics constants to a config module** — physics tuning values live in `physics.ts`
 - [ ] **Split `VehicleModel.ts`** — it's ~400 lines mixing body geometry, wheel animation, and material creation; separate into `VehicleBody.ts`, `VehicleWheels.ts`, `VehicleMaterials.ts`
 - [ ] **Add JSDoc to public APIs** — `updateVehicleState`, `updateGateHuntProgress`, `getGameplayCameraPose`, `getSurfaceForPoint`
 
@@ -259,16 +259,16 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 
 | Phase | Done | Partial | Remaining | Total |
 |-------|------|---------|-----------|-------|
-| Phase 1: Physics | 12 | 0 | 8 | 20 |
+| Phase 1: Physics | 15 | 0 | 5 | 20 |
 | Phase 2: Terrain | 7 | 1 | 4 | 12 |
-| Phase 3: Vehicle Art | 11 | 0 | 13 | 24 |
-| Phase 4: Gate Hunt | 13 | 1 | 10 | 24 |
+| Phase 3: Vehicle Art | 13 | 0 | 11 | 24 |
+| Phase 4: Gate Hunt | 19 | 1 | 4 | 24 |
 | Phase 5: Damage/Flips | 5 | 0 | 18 | 23 |
 | Phase 6: Multiplayer | 6 | 0 | 14 | 20 |
 | Cross-cutting | 3 | 0 | 8 | 11 |
-| **Total** | **57** | **2** | **75** | **134** |
+| **Total** | **68** | **2** | **64** | **134** |
 
-**Overall completion: ~44%** of the full-scope tasklist is done.
+**Overall completion: ~52%** of the full-scope tasklist is done.
 
 ### Recommended Priority Order
 
