@@ -195,6 +195,8 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 - [x] Rollover risk accumulation → overturn state
 - [x] Overturned vehicles cannot drive
 - [x] Recovery input (R key)
+- [~] **Fix vertical wall climbing** — first steep-contact blocker added; still needs playtesting and deflection tuning for wall-like terrain faces
+- [~] **Make rollovers achievable** — rollover thresholds lowered; still needs momentum continuation and bad-landing roll behavior
 - [ ] **Partial roll states** — distinguish between "on side" (can self-right with throttle + steering), "on roof" (needs recovery), and "end-over-end" (full flip)
 - [ ] **Roll momentum continuation** — currently once `overturned` is true, the car locks; allow the car to continue rolling through a full flip and potentially land back on wheels naturally
 

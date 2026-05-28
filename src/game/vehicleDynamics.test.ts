@@ -68,6 +68,29 @@ describe('updateVehicleState', () => {
     expect(next.z).toBeLessThanOrEqual(playableHalfSize);
   });
 
+  it('blocks terrain steps that are too steep to climb', () => {
+    const start = makeVehicleStateAt(-18, 28, 0);
+    const staleLowContacts = start.wheelContacts.map((contact) => ({
+      ...contact,
+      groundHeight: contact.groundHeight - 3,
+    }));
+    const next = updateVehicleState(
+      {
+        ...start,
+        velocityX: 0,
+        velocityZ: 14,
+        speed: 14,
+        wheelContacts: staleLowContacts,
+      },
+      { throttle: 1, brake: 0, steering: 0 },
+      vehicleCatalog[0],
+      0.05,
+    );
+
+    expect(next.z).toBe(start.z);
+    expect(next.speed).toBeLessThan(0);
+  });
+
   it('damps sideways velocity through tire grip', () => {
     const next = updateVehicleState(
       { ...initialVehicleState, velocityX: 20, velocityZ: -18, yaw: 0, speed: 0 },
@@ -187,6 +210,29 @@ describe('updateVehicleState', () => {
     expect(next.verticalVelocity).toBeGreaterThan(-5);
   });
 
+  it('adds bounded damage for hard landings instead of a runaway wreck', () => {
+    const start = makeVehicleStateAt(-22, 34, 0);
+    const next = updateVehicleState(
+      {
+        ...start,
+        airborne: true,
+        bodyHeight: start.bodyHeight + 0.08,
+        verticalVelocity: -10,
+        velocityX: 0,
+        velocityZ: 24,
+        speed: 24,
+      },
+      { throttle: 0, brake: 0, steering: 0 },
+      vehicleCatalog[0],
+      0.05,
+    );
+
+    expect(next.damage).toBeGreaterThan(0);
+    expect(next.cosmeticDamage).toBeLessThanOrEqual(7.5);
+    expect(next.mechanicalDamage).toBeLessThanOrEqual(3);
+    expect(next.mechanicalDamage).toBeLessThan(next.cosmeticDamage);
+  });
+
   it('reconnects to ground after a small jump cycle', () => {
     const start = makeVehicleStateAt(-22, 34, 0);
     let next: VehicleState = {
@@ -251,6 +297,25 @@ describe('updateVehicleState', () => {
     expect(next.roll).toBe(0);
     expect(next.bodyHeight).toBeGreaterThan(terrainHeight(next.x, next.z) + wheelRadius);
     expect(next.recoveryCooldown).toBeGreaterThan(0);
+    expect(next.recoveryPenalty).toBe(3);
+  });
+
+  it('lets normal drive input recover an overturned vehicle', () => {
+    const next = updateVehicleState(
+      {
+        ...initialVehicleState,
+        roll: 2.55,
+        rolloverRisk: 1,
+        overturned: true,
+        recoveryCooldown: 0,
+      },
+      { throttle: 1, brake: 0, steering: 0 },
+      vehicleCatalog[0],
+      0.16,
+    );
+
+    expect(next.overturned).toBe(false);
+    expect(next.speed).toBe(0);
     expect(next.recoveryPenalty).toBe(3);
   });
 

@@ -107,7 +107,7 @@ export function updateVehicleState(
   vehicle: VehicleSpec,
   deltaSeconds: number,
 ): VehicleState {
-  if (input.recover && state.overturned && state.recoveryCooldown <= 0) {
+  if (state.overturned && state.recoveryCooldown <= 0 && wantsRecovery(input)) {
     return recoverVehicle(state);
   }
 
@@ -167,8 +167,8 @@ export function updateVehicleState(
       state.velocityZ * drag) *
       deltaSeconds;
 
-  const speed = Math.hypot(velocityX, velocityZ);
-  const signedSpeed = velocityX * forwardX + velocityZ * forwardZ;
+  let speed = Math.hypot(velocityX, velocityZ);
+  let signedSpeed = velocityX * forwardX + velocityZ * forwardZ;
   const steerSpeedFactor = clamp(speed / p.steerSpeedDivisor, p.steerSpeedMin, 1);
   const slidePenalty = clamp(1 - Math.abs(sideSpeed) / p.slidePenaltyDivisor, p.slidePenaltyMin, 1);
   const yaw =
@@ -183,8 +183,8 @@ export function updateVehicleState(
       deltaSeconds;
   const x = state.x + velocityX * deltaSeconds;
   const z = state.z + velocityZ * deltaSeconds;
-  const boundedX = clamp(x, -playableHalfSize, playableHalfSize);
-  const boundedZ = clamp(z, -playableHalfSize, playableHalfSize);
+  let boundedX = clamp(x, -playableHalfSize, playableHalfSize);
+  let boundedZ = clamp(z, -playableHalfSize, playableHalfSize);
 
   if (boundedX !== x) {
     velocityX *= p.boundaryReflection;
@@ -192,6 +192,17 @@ export function updateVehicleState(
 
   if (boundedZ !== z) {
     velocityZ *= p.boundaryReflection;
+  }
+
+  const climbImpact = calculateClimbImpact(state, boundedX, boundedZ, yaw, speed);
+
+  if (climbImpact.blocked) {
+    boundedX = state.x;
+    boundedZ = state.z;
+    velocityX *= p.climbImpactRetain;
+    velocityZ *= p.climbImpactRetain;
+    speed = Math.hypot(velocityX, velocityZ);
+    signedSpeed = velocityX * forwardX + velocityZ * forwardZ;
   }
 
   const suspension = solveSuspension(state, boundedX, boundedZ, velocityX, velocityZ, yaw, vehicle, deltaSeconds);
@@ -288,19 +299,49 @@ function estimateImpactDamage(
     return { cosmetic: 0, mechanical: 0 };
   }
 
-  const previousGround =
-    previous.wheelContacts.reduce((total, contact) => total + contact.groundHeight, 0) / previous.wheelContacts.length;
-  const currentGround =
-    suspension.wheelContacts.reduce((total, contact) => total + contact.groundHeight, 0) / suspension.wheelContacts.length;
-  const slopeHit = Math.max(0, Math.abs(currentGround - previousGround) - p.damageSlopeHitThreshold);
+  const previousGround = averageGroundHeight(previous.wheelContacts);
+  const currentGround = averageGroundHeight(suspension.wheelContacts);
+  const terrainStep = Math.abs(currentGround - previousGround);
   const bottomOut = Math.max(0, suspension.suspensionTravel - p.damageBottomOutThreshold);
+  const slopeHit = suspension.suspensionTravel > 0.55 ? Math.max(0, terrainStep - p.damageSlopeHitThreshold) : 0;
+  const hardLanding = previous.airborne ? Math.max(0, -previous.verticalVelocity - p.damageLandingThreshold) : 0;
+
+  if (slopeHit <= 0 && bottomOut <= 0 && hardLanding <= 0) {
+    return { cosmetic: 0, mechanical: 0 };
+  }
+
   const durabilityScale = clamp(10 / Math.max(vehicle.durability, 1), 0.65, 1.8);
+  const speedScale = clamp((impactSpeed - p.damageMinSpeed) / p.damageSpeedRamp, 0.15, 1);
   const baseDamage =
-    (slopeHit * p.damageSlopeMultiplier + bottomOut * p.damageBottomOutMultiplier) * impactSpeed * durabilityScale * 100;
+    (slopeHit * p.damageSlopeMultiplier +
+      bottomOut * p.damageBottomOutMultiplier +
+      hardLanding * p.damageLandingMultiplier) *
+    impactSpeed *
+    speedScale *
+    durabilityScale *
+    100;
 
   return {
-    cosmetic: baseDamage * 1.15,
-    mechanical: baseDamage * 0.72,
+    cosmetic: Math.min(baseDamage * 1.15, p.damageCosmeticImpactCap),
+    mechanical: Math.min(baseDamage * 0.42, p.damageMechanicalImpactCap),
+  };
+}
+
+function wantsRecovery(input: ControlInput) {
+  return Boolean(input.recover) || input.throttle > 0 || input.brake > 0 || input.steering !== 0 || (input.handbrake ?? 0) > 0;
+}
+
+function calculateClimbImpact(state: VehicleState, x: number, z: number, yaw: number, speed: number) {
+  if (speed < p.climbImpactMinSpeed || state.airborne || state.overturned) {
+    return { blocked: false };
+  }
+
+  const previousGround = averageGroundHeight(state.wheelContacts);
+  const nextGround = averageGroundHeight(makeWheelContacts(x, z, yaw));
+  const climbStep = nextGround - previousGround;
+
+  return {
+    blocked: climbStep > p.maxClimbStep,
   };
 }
 
@@ -316,11 +357,9 @@ function solveSuspension(
 ) {
   const groundHeight = terrainHeight(x, z);
   const wheelContacts = makeWheelContacts(x, z, yaw);
-  const averageWheelGround =
-    wheelContacts.reduce((total, contact) => total + contact.groundHeight, 0) / wheelContacts.length;
+  const averageWheelGround = averageGroundHeight(wheelContacts);
   const targetHeight = averageWheelGround + wheelRadius + suspensionRestLength;
-  const previousAverageWheelGround =
-    state.wheelContacts.reduce((total, contact) => total + contact.groundHeight, 0) / state.wheelContacts.length;
+  const previousAverageWheelGround = averageGroundHeight(state.wheelContacts);
   const terrainLiftSpeed = (averageWheelGround - previousAverageWheelGround) / Math.max(deltaSeconds, 0.001);
   const horizontalSpeed = Math.hypot(velocityX, velocityZ);
   const crestLaunchBoost = shouldLaunchFromCrest(state, targetHeight, terrainLiftSpeed, horizontalSpeed)
@@ -456,6 +495,10 @@ function makeWheelContacts(x: number, z: number, yaw: number): readonly WheelCon
       compression: 0,
     };
   });
+}
+
+function averageGroundHeight(contacts: readonly WheelContact[]) {
+  return contacts.reduce((total, contact) => total + contact.groundHeight, 0) / contacts.length;
 }
 
 /**

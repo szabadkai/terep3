@@ -63,6 +63,12 @@ export const physics = {
 
   /** Boundary reflection coefficient when hitting terrain edge */
   boundaryReflection: -0.22,
+  /** Maximum terrain step the vehicle can climb in one contact solve */
+  maxClimbStep: 1.35,
+  /** Speed threshold where over-steep climb contacts start acting like impacts */
+  climbImpactMinSpeed: 4,
+  /** Velocity retained after hitting terrain too steep to climb */
+  climbImpactRetain: -0.12,
 
   /** Airborne detection: body must be above target by this margin and not falling fast */
   airborneHeightMargin: 0.48,
@@ -119,16 +125,16 @@ export const physics = {
   terrainLiftTransfer: 0.52,
 
   /** Rollover risk: roll stress threshold (above this starts accumulating) */
-  rolloverRollThreshold: 0.24,
-  rolloverRollScale: 0.12,
-  rolloverPitchThreshold: 0.28,
-  rolloverPitchScale: 0.12,
-  rolloverLateralThreshold: 9,
-  rolloverLateralScale: 18,
-  rolloverSpeedThreshold: 18,
-  rolloverSpeedScale: 22,
-  rolloverAccumulationMultiplier: 1.45,
-  rolloverPitchSpeedMultiplier: 0.82,
+  rolloverRollThreshold: 0.2,
+  rolloverRollScale: 0.1,
+  rolloverPitchThreshold: 0.24,
+  rolloverPitchScale: 0.1,
+  rolloverLateralThreshold: 7.5,
+  rolloverLateralScale: 15,
+  rolloverSpeedThreshold: 16,
+  rolloverSpeedScale: 18,
+  rolloverAccumulationMultiplier: 2.1,
+  rolloverPitchSpeedMultiplier: 1.15,
   rolloverAirborneRecovery: 0.08,
   rolloverGroundedRecovery: 0.42,
 
@@ -138,17 +144,27 @@ export const physics = {
   overturnedPitchLerp: 0.55,
 
   /** Damage: drag penalty per damage point */
-  damageDragPerPoint: 0.012,
+  damageDragPerPoint: 0.006,
   /** Damage: minimum speed for impact */
-  damageMinSpeed: 13,
+  damageMinSpeed: 16,
+  /** Damage: speed range where terrain impacts ramp from minor to full force */
+  damageSpeedRamp: 24,
   /** Damage: slope hit threshold (height difference) */
-  damageSlopeHitThreshold: 1.8,
+  damageSlopeHitThreshold: 2.4,
   /** Damage: bottom-out threshold */
-  damageBottomOutThreshold: 0.82,
+  damageBottomOutThreshold: 0.86,
+  /** Damage: hard landing threshold from downward velocity */
+  damageLandingThreshold: 6.4,
   /** Damage: slope hit multiplier */
-  damageSlopeMultiplier: 0.014,
+  damageSlopeMultiplier: 0.01,
   /** Damage: bottom-out multiplier */
-  damageBottomOutMultiplier: 0.035,
+  damageBottomOutMultiplier: 0.026,
+  /** Damage: hard landing multiplier */
+  damageLandingMultiplier: 0.012,
+  /** Damage: maximum cosmetic damage from one impact frame */
+  damageCosmeticImpactCap: 7.5,
+  /** Damage: maximum mechanical damage from one impact frame */
+  damageMechanicalImpactCap: 3,
 
   /** Wheel contact sampling */
   wheelContactForwardSamples: [-0.92, -0.7, -0.46, -0.23, 0, 0.23, 0.46, 0.7, 0.92] as readonly number[],
