@@ -5,10 +5,12 @@ import {
   getWheelContactGroundHeight,
   initialVehicleState,
   updateVehicleState,
+  type ControlInput,
+  type VehicleState,
   type WheelContact,
 } from './vehicleDynamics';
 import { vehicleCatalog } from './vehicles';
-import { wheelRadius } from './wheelLayout';
+import { suspensionRestLength, wheelLayout, wheelRadius } from './wheelLayout';
 
 describe('updateVehicleState', () => {
   it('accelerates forward when throttle is applied', () => {
@@ -73,6 +75,39 @@ describe('updateVehicleState', () => {
     );
 
     expect(Math.abs(next.velocityX)).toBeLessThan(20);
+  });
+
+  it('keeps more lateral slide on low-grip water than rock', () => {
+    const water = updateVehicleState(
+      { ...makeVehicleStateAt(-10, 96, 0), velocityX: 14, velocityZ: 0, speed: 0 },
+      { throttle: 0, brake: 0, steering: 0 },
+      vehicleCatalog[0],
+      0.05,
+    );
+    const rock = updateVehicleState(
+      { ...makeVehicleStateAt(-102, 60, 0), velocityX: 14, velocityZ: 0, speed: 0 },
+      { throttle: 0, brake: 0, steering: 0 },
+      vehicleCatalog[0],
+      0.05,
+    );
+
+    expect(Math.abs(water.velocityX)).toBeGreaterThan(Math.abs(rock.velocityX));
+  });
+
+  it('climbs a repeatable grass test hill under sustained throttle', () => {
+    const start = makeVehicleStateAt(-12, 16, Math.atan2(0.39495092012806643, 0.05867509264925598));
+    const next = simulateDrive(start, { throttle: 1, brake: 0, steering: 0 }, 3.2);
+
+    expect(terrainHeight(next.x, next.z)).toBeGreaterThan(terrainHeight(start.x, start.z) + 0.7);
+    expect(next.speed).toBeGreaterThan(4);
+    expect(next.overturned).toBe(false);
+  });
+
+  it('brakes a moving vehicle to a much lower forward speed', () => {
+    const start = { ...makeVehicleStateAt(12, 90, 0), velocityX: 0, velocityZ: 22, speed: 22 };
+    const next = simulateDrive(start, { throttle: 0, brake: 1, steering: 0 }, 1);
+
+    expect(next.speed).toBeLessThan(7);
   });
 
   it('keeps the body height above the terrain through suspension travel', () => {
@@ -207,4 +242,45 @@ function makeContact(id: string, localX: number, localZ: number, groundHeight: n
     groundHeight,
     compression: 0,
   };
+}
+
+function makeVehicleStateAt(x: number, z: number, yaw: number): VehicleState {
+  const wheelContacts = wheelLayout.map((wheel) => {
+    const worldX = x + Math.cos(yaw) * wheel.x + Math.sin(yaw) * wheel.z;
+    const worldZ = z - Math.sin(yaw) * wheel.x + Math.cos(yaw) * wheel.z;
+
+    return makeContact(wheel.id, wheel.x, wheel.z, getWheelContactGroundHeight(worldX, worldZ, yaw));
+  });
+  const averageWheelGround =
+    wheelContacts.reduce((total, contact) => total + contact.groundHeight, 0) / wheelContacts.length;
+
+  return {
+    ...initialVehicleState,
+    x,
+    z,
+    yaw,
+    velocityX: 0,
+    velocityZ: 0,
+    bodyHeight: averageWheelGround + wheelRadius + suspensionRestLength,
+    verticalVelocity: 0,
+    pitch: 0,
+    roll: 0,
+    suspensionTravel: 0,
+    wheelContacts,
+    airborne: false,
+    speed: 0,
+    rolloverRisk: 0,
+    overturned: false,
+  };
+}
+
+function simulateDrive(state: VehicleState, input: ControlInput, seconds: number) {
+  let next = state;
+  const deltaSeconds = 0.05;
+
+  for (let elapsed = 0; elapsed < seconds; elapsed += deltaSeconds) {
+    next = updateVehicleState(next, input, vehicleCatalog[0], deltaSeconds);
+  }
+
+  return next;
 }
