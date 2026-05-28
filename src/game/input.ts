@@ -1,4 +1,5 @@
 import type { ControlInput } from './vehicleDynamics';
+import type { GameplayCameraView } from './gameplayCamera';
 
 const activeKeys = new Set<string>();
 
@@ -29,4 +30,20 @@ export function readKeyboardInput(): ControlInput {
     steering: Number(left) - Number(right),
     recover,
   };
+}
+
+export function readCameraViewInput(): GameplayCameraView | undefined {
+  if (activeKeys.has('1')) {
+    return 'chase';
+  }
+
+  if (activeKeys.has('2')) {
+    return 'slope';
+  }
+
+  if (activeKeys.has('3')) {
+    return 'close';
+  }
+
+  return undefined;
 }

@@ -90,6 +90,7 @@ export function Hud({ modes, vehicles, gateHuntProgress }: HudProps) {
       <footer className="hud__footer">
         <span>WASD / arrows</span>
         <span>R recover</span>
+        <span>1/2/3 camera</span>
       </footer>
     </section>
   );

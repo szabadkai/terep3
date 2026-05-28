@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { gateTargets } from './gateHunt';
-import { getSurfaceForPoint } from './surfaces';
+import { getSurfaceForPoint, type SurfaceType } from './surfaces';
 
 export const terrainSize = 300;
 export const playableHalfSize = 138;
@@ -78,16 +78,58 @@ function addTerrainTriangle(
   });
 }
 
-function getTerrainPixelColor(x: number, z: number) {
+export function getTerrainPixelColor(x: number, z: number) {
   const surface = getSurfaceForPoint(x, z);
   const base = new THREE.Color(surface.color);
   const cellX = Math.floor((x + terrainSize / 2) / 3.2);
   const cellZ = Math.floor((z + terrainSize / 2) / 3.2);
   const noise = seededTerrainNoise(cellX, cellZ);
   const diagonalBreakup = seededTerrainNoise(cellX + cellZ * 3, cellZ - cellX * 2);
-  const shade = noise < 0.22 ? 0.58 : noise > 0.76 ? 1.28 : 0.92 + diagonalBreakup * 0.18;
+  const ridgeBreakup = seededTerrainNoise(cellX * 5 - cellZ, cellZ * 7 + cellX);
+  const cellAccent = (cellX + cellZ) % 2 === 0 ? 0.88 : 1.12;
+  const shade = getSurfaceShade(surface.type, noise, diagonalBreakup, ridgeBreakup) * cellAccent;
 
-  return base.multiplyScalar(shade);
+  return tintSurfaceColor(base, surface.type).multiplyScalar(shade);
+}
+
+function tintSurfaceColor(color: THREE.Color, type: SurfaceType) {
+  if (type === 'rock') {
+    return color.lerp(new THREE.Color('#c2bdad'), 0.32);
+  }
+
+  if (type === 'mud') {
+    return color.lerp(new THREE.Color('#35251b'), 0.26);
+  }
+
+  if (type === 'water') {
+    return color.lerp(new THREE.Color('#2c668a'), 0.28);
+  }
+
+  if (type === 'snow') {
+    return color.lerp(new THREE.Color('#f5fbf8'), 0.18);
+  }
+
+  return color;
+}
+
+function getSurfaceShade(type: SurfaceType, noise: number, diagonalBreakup: number, ridgeBreakup: number) {
+  if (type === 'water') {
+    return noise < 0.18 ? 0.72 : 0.86 + diagonalBreakup * 0.1;
+  }
+
+  if (type === 'snow') {
+    return noise > 0.68 ? 1.18 : 0.88 + diagonalBreakup * 0.24;
+  }
+
+  if (type === 'rock') {
+    return noise < 0.34 ? 0.5 : 0.82 + ridgeBreakup * 0.36;
+  }
+
+  if (type === 'mud') {
+    return noise < 0.28 ? 0.48 : 0.72 + diagonalBreakup * 0.2;
+  }
+
+  return noise < 0.22 ? 0.58 : noise > 0.76 ? 1.28 : 0.92 + diagonalBreakup * 0.18;
 }
 
 function seededTerrainNoise(x: number, z: number) {

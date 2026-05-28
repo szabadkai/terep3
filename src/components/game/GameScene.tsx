@@ -1,9 +1,10 @@
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
-import { bindKeyboardControls, readKeyboardInput } from '../../game/input';
+import { getGameplayCameraPose, type GameplayCameraView } from '../../game/gameplayCamera';
+import { bindKeyboardControls, readCameraViewInput, readKeyboardInput } from '../../game/input';
 import { createGateMarkers, createTerrainMesh } from '../../game/terrain';
 import { initialGateHuntProgress, updateGateHuntProgress, type GateHuntProgress } from '../../game/gateHunt';
-import { getVehicleAltitude, initialVehicleState, updateVehicleState } from '../../game/vehicleDynamics';
+import { initialVehicleState, updateVehicleState } from '../../game/vehicleDynamics';
 import { vehicleCatalog } from '../../game/vehicles';
 import { animateVehicleRig, createVehicleMesh } from './VehicleModel';
 
@@ -46,6 +47,7 @@ export function GameScene({ onGateHuntProgress }: GameSceneProps) {
     let vehicleState = initialVehicleState;
     let gateProgress = initialGateHuntProgress;
     let lastProgressEmit = 0;
+    let cameraView: GameplayCameraView = 'chase';
 
     const resizeObserver = new ResizeObserver(() => {
       const width = mount.clientWidth;
@@ -61,6 +63,7 @@ export function GameScene({ onGateHuntProgress }: GameSceneProps) {
       const deltaSeconds = Math.min((frameTime - previousFrameTime) / 1000, 0.05);
       previousFrameTime = frameTime;
       const input = readKeyboardInput();
+      cameraView = readCameraViewInput() ?? cameraView;
       vehicleState = updateVehicleState(vehicleState, input, vehicleCatalog[0], deltaSeconds);
 
       vehicle.position.set(vehicleState.x, 0, vehicleState.z);
@@ -74,13 +77,9 @@ export function GameScene({ onGateHuntProgress }: GameSceneProps) {
         lastProgressEmit = frameTime;
       }
 
-      const cameraTarget = new THREE.Vector3(vehicleState.x, getVehicleAltitude(vehicleState) + 2.2, vehicleState.z);
-      const cameraOffset = new THREE.Vector3(
-        -Math.sin(vehicleState.yaw) * 16,
-        8.5,
-        -Math.cos(vehicleState.yaw) * 16,
-      );
-      camera.position.lerp(cameraTarget.clone().add(cameraOffset), 0.08);
+      const cameraPose = getGameplayCameraPose(vehicleState, cameraView);
+      const cameraTarget = new THREE.Vector3(...cameraPose.target);
+      camera.position.lerp(new THREE.Vector3(...cameraPose.position), cameraPose.smoothing);
       camera.lookAt(cameraTarget);
 
       renderer.render(scene, camera);
