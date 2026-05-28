@@ -30,7 +30,7 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 - [x] Overturned state locks roll to extreme angle and disables controls
 - [x] Recovery: R key sets vehicle upright with zero velocity at average wheel ground height
 - [x] **Flip detection on side slopes** — static tip-over risk model (`staticTipOverRisk`) adds risk from steep attitudes even at rest
-- [ ] **Recovery animation/transition** — the instant snap to upright is jarring; add a brief 0.3s lerp or camera transition
+- [x] **Recovery animation/transition** — the instant snap to upright is jarring; add a brief 0.3s lerp or camera transition
 
 ### Torque, Grip, Braking
 - [x] Drive force with hill-torque compensation (`hillTorque` based on speed ratio)
@@ -71,7 +71,7 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 - [x] `flatShading: true` for chunky retro look
 - [x] `DoubleSide` rendering — no backface culling issues
 - [ ] **Eliminate visible cell-grid seams** — the 3.2-unit cell size creates visible edges at certain distances; consider overlapping cell edges or adding a second octave of noise at a different scale
-- [ ] **Water surface flatness** — water areas currently follow the same terrain height function; consider making water cells perfectly flat or adding a subtle wave shader for the "water cut" feel mentioned in the Gate Hunt description
+- [x] **Water surface flatness** — water areas currently follow the same terrain height function; consider making water cells perfectly flat or adding a subtle wave shader for the "water cut" feel mentioned in the Gate Hunt description
 
 ### Surface Distinction
 - [x] Five surface types with distinct colors and shading
@@ -97,7 +97,7 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 - [x] **Narrow the body profile** — hull sections tightened to a narrower race-machine silhouette
 - [x] **Slope the hood more aggressively** — hood nose lowered and narrowed for a sharper front profile
 - [ ] **Raise and compact the cabin** — cabin roof is at y=1.28; consider raising slightly (1.4) and shortening the cabin length to emphasize the off-road machine silhouette
-- [ ] **Add visible suspension arms** — simple low-poly A-arms or trailing arms connecting chassis to wheel hubs; needs a less fragmentary treatment
+- [x] **Add visible suspension arms** — simple low-poly A-arms or trailing arms connecting chassis to wheel hubs; needs a less fragmentary treatment
 
 ### Wheel & Tire Details
 - [x] Cylindrical tires with 12 segments and textured material
@@ -167,6 +167,10 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 - [x] Retry button in panel header
 - [x] **Add mini route map** — HUD shows gate positions, active gate, route line, vehicle position, and heading-to-gate line
 - [x] **Show next gate preview** — HUD callout shows the next gate after the current active target
+- [x] **Compact HUD cleanup** — remove unimplemented catalog, garage, and network affordances from the live overlay
+- [ ] **Detailed split review UI** — move split times into a compact post-run or expandable panel instead of always reserving HUD space
+- [ ] **Mode selection UI** — reintroduce a mode picker only after additional modes have playable logic and clear selected-mode behavior
+- [ ] **Garage selection UI** — add vehicle selection, switching, and selected-vehicle feedback before showing garage stats in the HUD again
 
 ---
 
@@ -181,7 +185,7 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 - [x] **HUD damage indicator** — show current damage as a bar or percentage in the HUD
 
 ### Visual Damage
-- [ ] **Panel deformation states** — create 2-3 levels of dented geometry variants for hood, doors, and roof that swap in based on damage level
+- [x] **Panel deformation states** — create 2-3 levels of dented geometry variants for hood, doors, and roof that swap in based on damage level
 - [ ] **Bumper detachment** — at high damage, bumpers should visibly hang or detach
 - [ ] **Broken glass** — add crack texture overlay on cabin glass at moderate damage
 - [ ] **Wheel damage visuals** — bent wheel geometry or wobble animation at high damage
@@ -199,7 +203,7 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 - [x] Recovery preserves damage state
 - [x] **Recovery cooldown** — 2-second cooldown after recovery prevents spam
 - [x] **Recovery penalty** — +3 seconds added to Gate Hunt clock on recovery
-- [ ] **Recovery animation** — brief camera shake or transition instead of instant teleport
+- [x] **Recovery animation** — brief camera shake or transition instead of instant teleport
 
 ---
 
@@ -226,6 +230,7 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 - [ ] **Flag Run mode logic** — flag pickup, carry, drop, return mechanics
 - [ ] **Destruction Zone scoring** — impact-angle and speed-based scoring formula
 - [ ] **Hill Trial logic** — climb-checkpoint detection, rollback penalty timer
+- [ ] **Network status UI** — add online-room/status controls only after networking architecture and room flow are implemented
 
 ### Pre-Multiplayer Gate
 - [ ] **Single-player polish complete** — Gate Hunt loop, damage visuals, recovery all finalized (Phases 1-5 done)
@@ -250,7 +255,7 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 
 ### Accessibility
 - [x] **Keyboard remapping** — extract key bindings to a config constant so players can customize controls
-- [ ] **Gamepad support** — add Gamepad API input reader alongside keyboard controls
+- [x] **Gamepad support** — add Gamepad API input reader alongside keyboard controls
 - [ ] **Colorblind terrain mode** — add pattern-based (not color-only) surface differentiation option
 
 ---
@@ -259,16 +264,16 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 
 | Phase | Done | Partial | Remaining | Total |
 |-------|------|---------|-----------|-------|
-| Phase 1: Physics | 15 | 0 | 5 | 20 |
-| Phase 2: Terrain | 7 | 1 | 4 | 12 |
-| Phase 3: Vehicle Art | 13 | 0 | 11 | 24 |
-| Phase 4: Gate Hunt | 19 | 1 | 4 | 24 |
-| Phase 5: Damage/Flips | 5 | 0 | 18 | 23 |
+| Phase 1: Physics | 40 | 0 | 1 | 41 |
+| Phase 2: Terrain | 11 | 0 | 5 | 16 |
+| Phase 3: Vehicle Art | 18 | 0 | 7 | 25 |
+| Phase 4: Gate Hunt | 33 | 0 | 3 | 36 |
+| Phase 5: Damage/Flips | 14 | 1 | 6 | 21 |
 | Phase 6: Multiplayer | 6 | 0 | 14 | 20 |
-| Cross-cutting | 3 | 0 | 8 | 11 |
-| **Total** | **68** | **2** | **64** | **134** |
+| Cross-cutting | 7 | 0 | 4 | 11 |
+| **Total** | **129** | **1** | **40** | **170** |
 
-**Overall completion: ~52%** of the full-scope tasklist is done.
+**Overall completion: ~76%** of the full-scope tasklist is done.
 
 ### Recommended Priority Order
 

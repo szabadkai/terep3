@@ -1,28 +1,19 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { initialGateHuntProgress } from '../../game/gateHunt';
-import { modeCatalog } from '../../game/modes';
 import { initialVehicleState } from '../../game/vehicleDynamics';
-import { vehicleCatalog } from '../../game/vehicles';
 import { Hud } from './Hud';
 
 describe('Hud', () => {
-  it('renders mode and garage data from the catalogs', () => {
-    render(
-      <Hud
-        modes={modeCatalog}
-        vehicles={vehicleCatalog}
-        gateHuntProgress={initialGateHuntProgress}
-        vehicleState={initialVehicleState}
-      />,
-    );
+  it('renders compact Gate Hunt status', () => {
+    render(<Hud gateHuntProgress={initialGateHuntProgress} vehicleState={initialVehicleState} />);
 
-    expect(screen.getByRole('heading', { name: 'Terep3' })).toBeInTheDocument();
-    expect(screen.getAllByRole('heading', { name: 'Gate Hunt' }).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('Puli 4x4')).toBeInTheDocument();
-    expect(screen.getByText('Run active')).toBeInTheDocument();
+    expect(screen.getByText('Terep3')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Gate Hunt' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Gate A' })).toBeInTheDocument();
+    expect(screen.getByText(/Run active/)).toBeInTheDocument();
+    expect(screen.getByText(/Next B/)).toBeInTheDocument();
     expect(screen.getByLabelText('Mini route map')).toBeInTheDocument();
-    expect(screen.getByLabelText('Race timing callouts')).toHaveTextContent('NextGate B');
   });
 
   it('renders active gate feedback and exposes retry', () => {
@@ -30,8 +21,6 @@ describe('Hud', () => {
 
     render(
       <Hud
-        modes={modeCatalog}
-        vehicles={vehicleCatalog}
         gateHuntProgress={{
           ...initialGateHuntProgress,
           activeGateIndex: 2,
@@ -51,7 +40,7 @@ describe('Hud', () => {
     expect(screen.getByText('Best run')).toBeInTheDocument();
     expect(screen.getByText('1:12.4')).toBeInTheDocument();
     expect(screen.getByLabelText('Vehicle damage 42%')).toBeInTheDocument();
-    expect(screen.getByLabelText('Race timing callouts')).toHaveTextContent('NextGate D');
+    expect(screen.getByText(/Next D/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Retry Gate Hunt' }));
 

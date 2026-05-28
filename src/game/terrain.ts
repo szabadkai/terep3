@@ -6,8 +6,21 @@ export const terrainSize = 300;
 export const playableHalfSize = 138;
 
 const segments = 120;
+const waterPlaneBlend = 1;
+const waterPlaneHeight = -2.4;
 
 export function terrainHeight(x: number, z: number) {
+  const rawHeight = rawTerrainHeight(x, z);
+  const surface = getSurfaceForPoint(x, z);
+
+  if (surface.type === 'water') {
+    return THREE.MathUtils.lerp(rawHeight, waterPlaneHeight, waterPlaneBlend);
+  }
+
+  return rawHeight;
+}
+
+function rawTerrainHeight(x: number, z: number) {
   const rolling = Math.sin(x * 0.045) * 5 + Math.cos(z * 0.05) * 4;
   const ridge = Math.sin((x + z) * 0.034) * 6;
   const cut = Math.max(0, 10 - Math.abs(z + 34)) * -0.35;

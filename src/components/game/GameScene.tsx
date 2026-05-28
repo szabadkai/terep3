@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { getGameplayCameraPose, type GameplayCameraView } from '../../game/gameplayCamera';
-import { bindKeyboardControls, readCameraViewInput, readGateHuntRetryInput, readKeyboardInput } from '../../game/input';
+import { bindKeyboardControls, readCameraViewInput, readGateHuntRetryInput, readPlayerInput } from '../../game/input';
 import { createGateMarkers, createTerrainMesh, terrainHeight } from '../../game/terrain';
 import {
   gateTargets,
@@ -23,6 +23,12 @@ type GameSceneProps = {
   readonly onGateHuntProgress?: (progress: GateHuntProgress) => void;
   readonly onVehicleState?: (state: VehicleState) => void;
   readonly gateHuntRetrySignal?: number;
+};
+
+type RecoveryTransition = {
+  readonly startedAt: number;
+  readonly from: VehicleState;
+  readonly to: VehicleState;
 };
 
 export function GameScene({ onGateHuntProgress, onVehicleState, gateHuntRetrySignal = 0 }: GameSceneProps) {
@@ -76,6 +82,7 @@ export function GameScene({ onGateHuntProgress, onVehicleState, gateHuntRetrySig
     let cameraView: GameplayCameraView = 'chase';
     let lastRetrySignal = retrySignalRef.current;
     let previousCompletedRuns = gateProgress.completedRuns;
+    let recoveryTransition: RecoveryTransition | undefined;
 
     const resizeObserver = new ResizeObserver(() => {
       const width = mount.clientWidth;
@@ -90,20 +97,34 @@ export function GameScene({ onGateHuntProgress, onVehicleState, gateHuntRetrySig
       const frameTime = performance.now();
       const deltaSeconds = Math.min((frameTime - previousFrameTime) / 1000, 0.05);
       previousFrameTime = frameTime;
-      const input = readKeyboardInput();
+      const input = readPlayerInput();
       cameraView = readCameraViewInput() ?? cameraView;
+      const previousVehicleState = vehicleState;
       vehicleState = updateVehicleState(vehicleState, input, vehicleCatalog[0], deltaSeconds);
+      if (didRecover(previousVehicleState, vehicleState)) {
+        recoveryTransition = {
+          startedAt: frameTime,
+          from: previousVehicleState,
+          to: vehicleState,
+        };
+      }
       const wantsRetry = readGateHuntRetryInput();
       const didRetry = wantsRetry || retrySignalRef.current !== lastRetrySignal;
       lastRetrySignal = retrySignalRef.current;
 
       if (didRetry) {
         vehicleState = resetVehicleForGateHunt();
+        recoveryTransition = undefined;
       }
 
-      vehicle.position.set(vehicleState.x, 0, vehicleState.z);
-      vehicle.rotation.set(0, vehicleState.yaw, 0);
-      animateVehicleRig(vehicle, vehicleState, input.steering, frameTime, deltaSeconds);
+      const visualVehicleState = resolveVisualVehicleState(vehicleState, recoveryTransition, frameTime);
+      if (recoveryTransition && visualVehicleState === vehicleState) {
+        recoveryTransition = undefined;
+      }
+
+      vehicle.position.set(visualVehicleState.x, 0, visualVehicleState.z);
+      vehicle.rotation.set(0, visualVehicleState.yaw, 0);
+      animateVehicleRig(vehicle, visualVehicleState, input.steering, frameTime, deltaSeconds);
       gateProgress = didRetry
         ? resetGateHuntRun(gateProgress, vehicleState)
         : updateGateHuntProgress(gateProgress, vehicleState, deltaSeconds);
@@ -115,7 +136,7 @@ export function GameScene({ onGateHuntProgress, onVehicleState, gateHuntRetrySig
       updateGateLabels(gateLabels, gateProgress.activeGateIndex, frameTime);
       updateActiveGateBeacon(activeGateBeacon, gateProgress, frameTime);
       updateCompletionCelebration(completionCelebration, frameTime);
-      updateGateDirectionMarker(gateDirectionMarker, gateProgress, vehicleState, frameTime);
+      updateGateDirectionMarker(gateDirectionMarker, gateProgress, visualVehicleState, frameTime);
 
       if (frameTime - lastProgressEmit > 180 || gateProgress.distanceToGate < 4.2 || didRetry) {
         onGateHuntProgress?.(gateProgress);
@@ -123,9 +144,10 @@ export function GameScene({ onGateHuntProgress, onVehicleState, gateHuntRetrySig
         lastProgressEmit = frameTime;
       }
 
-      const cameraPose = getGameplayCameraPose(vehicleState, cameraView);
+      const cameraPose = getGameplayCameraPose(visualVehicleState, cameraView);
       const cameraTarget = new THREE.Vector3(...cameraPose.target);
-      camera.position.lerp(new THREE.Vector3(...cameraPose.position), cameraPose.smoothing);
+      const cameraShake = recoveryTransition ? calculateRecoveryShake(recoveryTransition, frameTime) : new THREE.Vector3();
+      camera.position.lerp(new THREE.Vector3(...cameraPose.position).add(cameraShake), cameraPose.smoothing);
       camera.lookAt(cameraTarget);
 
       renderer.render(scene, camera);
@@ -144,6 +166,54 @@ export function GameScene({ onGateHuntProgress, onVehicleState, gateHuntRetrySig
   }, [onGateHuntProgress, onVehicleState]);
 
   return <div className="game-scene" ref={mountRef} data-testid="game-scene" />;
+}
+
+function didRecover(previous: VehicleState, current: VehicleState) {
+  return previous.overturned && !current.overturned && current.recoveryPenalty > previous.recoveryPenalty;
+}
+
+function resolveVisualVehicleState(
+  state: VehicleState,
+  transition: RecoveryTransition | undefined,
+  frameTime: number,
+): VehicleState {
+  if (!transition) {
+    return state;
+  }
+
+  const amount = THREE.MathUtils.smoothstep((frameTime - transition.startedAt) / 340, 0, 1);
+
+  if (amount >= 1) {
+    return state;
+  }
+
+  return {
+    ...state,
+    x: THREE.MathUtils.lerp(transition.from.x, transition.to.x, amount),
+    z: THREE.MathUtils.lerp(transition.from.z, transition.to.z, amount),
+    yaw: lerpAngle(transition.from.yaw, transition.to.yaw, amount),
+    bodyHeight: THREE.MathUtils.lerp(transition.from.bodyHeight, transition.to.bodyHeight, amount),
+    pitch: THREE.MathUtils.lerp(transition.from.pitch, transition.to.pitch, amount),
+    roll: THREE.MathUtils.lerp(transition.from.roll, transition.to.roll, amount),
+    wheelContacts: transition.to.wheelContacts,
+    overturned: false,
+  };
+}
+
+function calculateRecoveryShake(transition: RecoveryTransition, frameTime: number) {
+  const elapsed = (frameTime - transition.startedAt) / 340;
+  const strength = Math.max(0, 1 - elapsed) * 0.42;
+
+  return new THREE.Vector3(
+    Math.sin(frameTime * 0.052) * strength,
+    Math.sin(frameTime * 0.067) * strength * 0.5,
+    Math.cos(frameTime * 0.047) * strength,
+  );
+}
+
+function lerpAngle(start: number, end: number, amount: number) {
+  const delta = Math.atan2(Math.sin(end - start), Math.cos(end - start));
+  return start + delta * amount;
 }
 
 function createGateLabels() {

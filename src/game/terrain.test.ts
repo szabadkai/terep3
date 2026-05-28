@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getSurfaceForPoint, type SurfaceType } from './surfaces';
-import { getTerrainPixelColor } from './terrain';
+import { terrainHeight, getTerrainPixelColor } from './terrain';
 
 const surfaceSamples: Record<SurfaceType, readonly [number, number]> = {
   grass: [12, 90],
@@ -37,8 +37,30 @@ describe('terrain visuals', () => {
     expect(sameCell).toBe(0);
     expect(nextCell).toBeGreaterThan(0.08);
   });
+
+  it('keeps water cuts much flatter than surrounding terrain', () => {
+    const waterHeights = [
+      terrainHeight(-42, 96),
+      terrainHeight(-34, 96),
+      terrainHeight(-26, 96),
+      terrainHeight(-10, 96),
+    ];
+    const grassHeights = [
+      terrainHeight(4, 82),
+      terrainHeight(12, 90),
+      terrainHeight(20, 98),
+      terrainHeight(28, 106),
+    ];
+
+    expect(heightRange(waterHeights)).toBeLessThan(1.8);
+    expect(heightRange(waterHeights)).toBeLessThan(heightRange(grassHeights));
+  });
 });
 
 function colorDistance(first: { r: number; g: number; b: number }, second: { r: number; g: number; b: number }) {
   return Math.hypot(first.r - second.r, first.g - second.g, first.b - second.b);
+}
+
+function heightRange(heights: readonly number[]) {
+  return Math.max(...heights) - Math.min(...heights);
 }

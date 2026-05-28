@@ -34,6 +34,7 @@ The project direction is simulation-first: the driving feel, wheel contact, susp
 - Turn Gate Hunt into a fully playable loop with active checkpoint direction, gate detection, run timing, best time, and reset/retry behavior.
 - Make active gates clear in-world without overwhelming the retro visual style.
 - Add simple completion feedback and route progression.
+- Keep the live HUD focused on implemented Gate Hunt telemetry: active gate, timing, route, damage, retry, and controls.
 - Keep the mode playable in single-player before adding competing vehicles or network play.
 
 ## Phase 5: Damage, Flips, and Recovery
@@ -48,6 +49,7 @@ The project direction is simulation-first: the driving feel, wheel contact, susp
 - Do not implement multiplayer until the core driving feel, Gate Hunt loop, and recovery behavior are solid.
 - Prepare the simulation state for future synchronization by keeping vehicle inputs, transforms, gate progress, and mode state explicit.
 - Evaluate authoritative room-based multiplayer only after single-player physics and mode rules are stable.
+- Do not surface network buttons, mode selection, or garage management in the HUD until those systems have real behavior behind them.
 
 ## Acceptance Criteria
 

@@ -9,6 +9,8 @@ export type VehicleRig = THREE.Group & {
     chassis?: THREE.Group;
     wheels?: THREE.Group[];
     wheelOffsets?: THREE.Vector3[];
+    suspensionArms?: THREE.Mesh[];
+    damageDetails?: THREE.Group;
     wheelRadius?: number;
     wheelSpin?: number[];
   };
@@ -31,12 +33,15 @@ export function createVehicleMesh(): VehicleRig {
   const materials = createVehicleMaterials();
   const wheels: THREE.Group[] = [];
   const wheelOffsets: THREE.Vector3[] = [];
+  const suspensionArms: THREE.Mesh[] = [];
+  const damageDetails = createDamageDetails(materials.trim, materials.glass);
 
   chassis.add(createMainHull(materials.body));
   chassis.add(createHoodPanel(materials.accent));
   chassis.add(createHoodNumberPanel());
   chassis.add(createRearPanel(materials.accent));
   chassis.add(createCabin(materials.glass));
+  chassis.add(damageDetails);
   chassis.add(createSkidPlate(materials.trim));
   chassis.add(createNumberPanel(-1));
   chassis.add(createNumberPanel(1));
@@ -50,12 +55,24 @@ export function createVehicleMesh(): VehicleRig {
     wheels.push(wheel);
     wheelOffsets.push(new THREE.Vector3(layout.x, 0, layout.z));
     vehicle.add(wheel);
+
+    [-0.44, 0.44].forEach((zOffset) => {
+      const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1, 6), materials.cage);
+      arm.castShadow = true;
+      arm.userData.wheelIndex = suspensionArms.length;
+      arm.userData.layoutIndex = wheels.length - 1;
+      arm.userData.zOffset = zOffset;
+      suspensionArms.push(arm);
+      vehicle.add(arm);
+    });
   });
 
   vehicle.add(chassis);
   vehicle.userData.chassis = chassis;
   vehicle.userData.wheels = wheels;
   vehicle.userData.wheelOffsets = wheelOffsets;
+  vehicle.userData.suspensionArms = suspensionArms;
+  vehicle.userData.damageDetails = damageDetails;
   vehicle.userData.wheelRadius = wheelRadius;
   vehicle.userData.wheelSpin = wheels.map(() => 0);
 
@@ -69,7 +86,7 @@ export function animateVehicleRig(
   frameTime: number,
   deltaSeconds: number,
 ) {
-  const { chassis, wheels, wheelOffsets } = vehicle.userData;
+  const { chassis, wheels, wheelOffsets, suspensionArms, damageDetails } = vehicle.userData;
   const rigWheelRadius = vehicle.userData.wheelRadius;
   const wheelSpin = vehicle.userData.wheelSpin;
 
@@ -85,6 +102,7 @@ export function animateVehicleRig(
 
   chassis.position.y = visualBodyHeight;
   chassis.rotation.set(visualPitch, 0, visualRoll, 'YXZ');
+  updateDamageDetails(damageDetails, state.cosmeticDamage);
 
   wheels.forEach((wheel, index) => {
     const offset = wheelOffsets[index];
@@ -106,10 +124,14 @@ export function animateVehicleRig(
       : contact.groundHeight + rigWheelRadius + axleHop;
     const wheelHeight = Math.max(targetWheelHeight, minimumWheelHeight);
 
+    const wheelDamageWobble = state.cosmeticDamage > 68 ? Math.sin(frameTime * 0.028 + index * 1.7) * 0.08 : 0;
     wheel.position.set(offset.x, wheelHeight, offset.z);
     wheel.rotation.set(visualPitch * 0.38, steerAngle, visualRoll + camber, 'YXZ');
+    wheel.rotation.x += wheelDamageWobble;
     spinWheelMeshes(wheel, wheelSpin[index]);
   });
+
+  updateSuspensionArms(suspensionArms, wheels, wheelOffsets, visualBodyHeight, visualPitch, visualRoll);
 }
 
 function createVehicleMaterials() {
@@ -305,6 +327,76 @@ function createBumpers(material: THREE.Material) {
   return bumpers;
 }
 
+function createDamageDetails(trimMaterial: THREE.Material, glassMaterial: THREE.Material) {
+  const details = new THREE.Group();
+  const dentMaterial = trimMaterial.clone();
+  const crackMaterial = glassMaterial.clone();
+
+  if (dentMaterial instanceof THREE.MeshStandardMaterial) {
+    dentMaterial.color.set('#15191a');
+    dentMaterial.transparent = true;
+    dentMaterial.opacity = 0.82;
+  }
+
+  if (crackMaterial instanceof THREE.MeshStandardMaterial) {
+    crackMaterial.color.set('#effaff');
+    crackMaterial.emissive.set('#bedee9');
+    crackMaterial.emissiveIntensity = 0.14;
+    crackMaterial.transparent = true;
+    crackMaterial.opacity = 0.86;
+  }
+
+  const lightDent = new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.035, 0.42), dentMaterial);
+  lightDent.position.set(-0.24, 0.12, 1.92);
+  lightDent.rotation.set(-0.28, 0.12, -0.08);
+  lightDent.userData.damageLevel = 22;
+
+  const deepDent = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.05, 0.34), dentMaterial);
+  deepDent.position.set(0.18, 0.22, 1.22);
+  deepDent.rotation.set(-0.42, -0.08, 0.16);
+  deepDent.userData.damageLevel = 48;
+
+  const roofDent = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.04, 0.5), dentMaterial);
+  roofDent.position.set(0.08, 1.23, -0.3);
+  roofDent.rotation.set(-0.08, 0.1, -0.2);
+  roofDent.userData.damageLevel = 72;
+
+  const crackGroup = new THREE.Group();
+  crackGroup.position.set(0, 0.9, 0.43);
+  crackGroup.rotation.x = -0.7;
+  crackGroup.userData.damageLevel = 38;
+
+  [
+    [0, 0, 0.46, 0.035, 0.035],
+    [-0.16, 0.07, 0.34, 0.03, 0.62],
+    [0.18, -0.05, 0.28, 0.03, -0.68],
+  ].forEach(([x, y, height, width, rotation]) => {
+    const crack = new THREE.Mesh(new THREE.BoxGeometry(width, 0.022, height), crackMaterial);
+    crack.position.set(x, y, 0);
+    crack.rotation.z = rotation;
+    crackGroup.add(crack);
+  });
+
+  details.add(lightDent, deepDent, roofDent, crackGroup);
+  updateDamageDetails(details, 0);
+  return details;
+}
+
+function updateDamageDetails(details: THREE.Group | undefined, cosmeticDamage: number) {
+  if (!details) {
+    return;
+  }
+
+  details.children.forEach((child) => {
+    const damageLevel = Number(child.userData.damageLevel ?? 0);
+    const visible = cosmeticDamage >= damageLevel;
+    const scale = visible ? clamp((cosmeticDamage - damageLevel) / 35, 0.35, 1.15) : 0.001;
+
+    child.visible = visible;
+    child.scale.setScalar(scale);
+  });
+}
+
 function createFenders(bodyMaterial: THREE.Material) {
   const fenders = new THREE.Group();
 
@@ -388,6 +480,50 @@ function createWheel(tireMaterial: THREE.Material, hubMaterial: THREE.Material) 
 
 function spinWheelMeshes(wheel: THREE.Group, spin: number) {
   wheel.children[0].rotation.x = spin;
+}
+
+function updateSuspensionArms(
+  arms: THREE.Mesh[] | undefined,
+  wheels: THREE.Group[],
+  wheelOffsets: THREE.Vector3[],
+  bodyHeight: number,
+  pitch: number,
+  roll: number,
+) {
+  if (!arms) {
+    return;
+  }
+
+  const chassisRotation = new THREE.Euler(pitch, 0, roll, 'YXZ');
+
+  arms.forEach((arm) => {
+    const layoutIndex = Number(arm.userData.layoutIndex);
+    const zOffset = Number(arm.userData.zOffset);
+    const offset = wheelOffsets[layoutIndex];
+    const wheel = wheels[layoutIndex];
+
+    if (!offset || !wheel) {
+      arm.visible = false;
+      return;
+    }
+
+    const chassisAnchor = new THREE.Vector3(offset.x * 0.58, -0.3, offset.z + zOffset * 0.28)
+      .applyEuler(chassisRotation)
+      .add(new THREE.Vector3(0, bodyHeight, 0));
+    const wheelAnchor = new THREE.Vector3(offset.x * 0.92, wheel.position.y, offset.z + zOffset);
+
+    placeCylinderBetween(arm, chassisAnchor, wheelAnchor);
+    arm.visible = true;
+  });
+}
+
+function placeCylinderBetween(mesh: THREE.Mesh, start: THREE.Vector3, end: THREE.Vector3) {
+  const direction = end.clone().sub(start);
+  const length = direction.length();
+
+  mesh.position.copy(start).addScaledVector(direction, 0.5);
+  mesh.scale.set(1, length, 1);
+  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize());
 }
 
 function createPolygonMesh(vertices: readonly number[][], faces: readonly number[][], material: THREE.Material) {

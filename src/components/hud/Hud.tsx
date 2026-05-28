@@ -1,19 +1,15 @@
-import { Activity, Code2, Flag, RadioTower, RotateCcw, Trophy, Wrench } from 'lucide-react';
+import { Code2, RotateCcw, Wrench } from 'lucide-react';
 import { formatGateDistance, formatRaceTime, gateTargets, type GateHuntProgress } from '../../game/gateHunt';
-import type { GameMode } from '../../game/modes';
 import { featuredMode } from '../../game/modes';
 import type { VehicleState } from '../../game/vehicleDynamics';
-import { getVehicleScore, type VehicleSpec } from '../../game/vehicles';
 
 type HudProps = {
-  readonly modes: readonly GameMode[];
-  readonly vehicles: readonly VehicleSpec[];
   readonly gateHuntProgress: GateHuntProgress;
   readonly vehicleState: VehicleState;
   readonly onRetryGateHunt?: () => void;
 };
 
-export function Hud({ modes, vehicles, gateHuntProgress, vehicleState, onRetryGateHunt }: HudProps) {
+export function Hud({ gateHuntProgress, vehicleState, onRetryGateHunt }: HudProps) {
   const gateHeadingStyle = {
     transform: `rotate(${gateHuntProgress.headingToGate}rad)`,
   };
@@ -27,24 +23,25 @@ export function Hud({ modes, vehicles, gateHuntProgress, vehicleState, onRetryGa
     <section className="hud" aria-label="Game interface">
       <header className="hud__header">
         <div>
-          <p className="hud__kicker">Low-poly off-road prototype</p>
-          <h1>Terep3</h1>
+          <p className="hud__kicker">Terep3</p>
+          <h1>{featuredMode.label}</h1>
         </div>
         <div className="hud__actions" aria-label="Project links">
-          <button type="button" className="icon-button" aria-label="Network play planned">
-            <RadioTower size={19} />
-          </button>
           <a className="icon-button" href="https://github.com/szabadkai/terep3" aria-label="GitHub repository">
             <Code2 size={19} />
           </a>
         </div>
       </header>
 
-      <section className="hud-panel hud-panel--mode" aria-labelledby="featured-mode">
-        <div className="panel-title panel-title--split">
-          <div className="panel-title__label">
-            <featuredMode.icon size={18} />
-            <h2 id="featured-mode">{featuredMode.label}</h2>
+      <section className="hud-panel hud-panel--compact" aria-labelledby="featured-mode">
+        <div className="gate-focus" aria-label={`Active gate ${gateHuntProgress.activeGateId}`}>
+          <span className="gate-focus__arrow" style={gateHeadingStyle} aria-hidden="true" />
+          <div>
+            <h2 id="featured-mode">Gate {gateHuntProgress.activeGateId}</h2>
+            <span>
+              {gateHuntProgress.completedRuns > 0 ? `${gateHuntProgress.completedRuns} runs` : 'Run active'} / Next{' '}
+              {nextGateId}
+            </span>
           </div>
           <button
             type="button"
@@ -55,96 +52,36 @@ export function Hud({ modes, vehicles, gateHuntProgress, vehicleState, onRetryGa
             <RotateCcw size={16} />
           </button>
         </div>
-        <p>{featuredMode.summary}</p>
-        <div className="gate-focus" aria-label={`Active gate ${gateHuntProgress.activeGateId}`}>
-          <span className="gate-focus__arrow" style={gateHeadingStyle} aria-hidden="true" />
-          <strong>Gate {gateHuntProgress.activeGateId}</strong>
-          <span>
-            {gateHuntProgress.completedRuns > 0 ? `${gateHuntProgress.completedRuns} runs` : 'Run active'}
-          </span>
-        </div>
-        <div className="race-strip" aria-label="Gate Hunt progress">
-          <span>
-            {gateHuntProgress.gatesCleared}/{gateHuntProgress.totalGates}
-          </span>
-          <span>{formatGateDistance(gateHuntProgress.distanceToGate)}</span>
-          <span>{formatRaceTime(gateHuntProgress.elapsedSeconds)}</span>
-          <span>{formatRaceTime(gateHuntProgress.bestSeconds)}</span>
-        </div>
-        <div className="race-callouts" aria-label="Race timing callouts">
-          <div className="race-callout">
-            <Trophy size={15} />
-            <span>Best</span>
-            <strong>{formatRaceTime(gateHuntProgress.bestSeconds)}</strong>
-          </div>
-          <div className="race-callout">
-            <Flag size={15} />
-            <span>Next</span>
-            <strong>Gate {nextGateId}</strong>
-          </div>
-        </div>
-        {gateHuntProgress.splitTimes && gateHuntProgress.splitTimes.length > 0 && (
-          <div className="split-times" aria-label="Gate split times">
-            {gateHuntProgress.splitTimes.map((split, index) => (
-              <span key={index} className="split-item">
-                <small>G{index + 1}</small>
-                <strong>{formatRaceTime(split)}</strong>
-              </span>
-            ))}
-          </div>
-        )}
-        {gateHuntProgress.lastRunSeconds !== undefined && (
-          <div className="run-feedback" data-improved={gateHuntProgress.bestTimeImproved ? 'true' : 'false'}>
-            <strong>{gateHuntProgress.bestTimeImproved ? 'Best run' : 'Last run'}</strong>
-            <span>{formatRaceTime(gateHuntProgress.lastRunSeconds)}</span>
-          </div>
-        )}
-        <RouteMap gateHuntProgress={gateHuntProgress} vehicleState={vehicleState} />
-        <div className="damage-meter" data-severity={getDamageSeverity(vehicleState.mechanicalDamage)}>
-          <div className="damage-meter__label">
-            <span>
-              <Wrench size={14} />
-              Damage
-            </span>
-            <strong>{damagePercent}%</strong>
-          </div>
-          <div className="damage-meter__track" aria-label={`Vehicle damage ${damagePercent}%`}>
-            <span className="damage-meter__fill" style={damageStyle} />
-          </div>
-        </div>
-      </section>
 
-      <section className="hud-panel" aria-labelledby="modes-title">
-        <div className="panel-title">
-          <Activity size={18} />
-          <h2 id="modes-title">Modes</h2>
+        <div className="race-grid" aria-label="Gate Hunt progress">
+          <HudStat label="Cleared" value={`${gateHuntProgress.gatesCleared}/${gateHuntProgress.totalGates}`} />
+          <HudStat label="Distance" value={formatGateDistance(gateHuntProgress.distanceToGate)} />
+          <HudStat label="Time" value={formatRaceTime(gateHuntProgress.elapsedSeconds)} />
+          <HudStat label="Best" value={formatRaceTime(gateHuntProgress.bestSeconds)} />
         </div>
-        <div className="mode-grid">
-          {modes.map((mode) => (
-            <article className="mode-tile" key={mode.id}>
-              <mode.icon size={17} />
-              <div>
-                <h3>{mode.label}</h3>
-                <span>{mode.players}</span>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
 
-      <section className="hud-panel" aria-labelledby="garage-title">
-        <h2 id="garage-title">Garage</h2>
-        <div className="vehicle-list">
-          {vehicles.map((vehicle) => (
-            <article className="vehicle-row" key={vehicle.id}>
-              <span className="vehicle-swatch" style={{ backgroundColor: vehicle.color }} />
-              <div>
-                <h3>{vehicle.name}</h3>
-                <span>{vehicle.className}</span>
+        <div className="hud-row">
+          <RouteMap gateHuntProgress={gateHuntProgress} vehicleState={vehicleState} />
+          <div className="hud-row__stack">
+            {gateHuntProgress.lastRunSeconds !== undefined && (
+              <div className="run-feedback" data-improved={gateHuntProgress.bestTimeImproved ? 'true' : 'false'}>
+                <strong>{gateHuntProgress.bestTimeImproved ? 'Best run' : 'Last run'}</strong>
+                <span>{formatRaceTime(gateHuntProgress.lastRunSeconds)}</span>
               </div>
-              <strong>{getVehicleScore(vehicle)}</strong>
-            </article>
-          ))}
+            )}
+            <div className="damage-meter" data-severity={getDamageSeverity(vehicleState.mechanicalDamage)}>
+              <div className="damage-meter__label">
+                <span>
+                  <Wrench size={14} />
+                  Damage
+                </span>
+                <strong>{damagePercent}%</strong>
+              </div>
+              <div className="damage-meter__track" aria-label={`Vehicle damage ${damagePercent}%`}>
+                <span className="damage-meter__fill" style={damageStyle} />
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -155,6 +92,15 @@ export function Hud({ modes, vehicles, gateHuntProgress, vehicleState, onRetryGa
         <span>1/2/3 camera</span>
       </footer>
     </section>
+  );
+}
+
+function HudStat({ label, value }: { readonly label: string; readonly value: string }) {
+  return (
+    <span className="hud-stat">
+      <small>{label}</small>
+      <strong>{value}</strong>
+    </span>
   );
 }
 
