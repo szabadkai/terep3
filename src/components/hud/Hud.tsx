@@ -1,16 +1,21 @@
-import { Activity, Code2, RadioTower } from 'lucide-react';
+import { Activity, Code2, RadioTower, RotateCcw } from 'lucide-react';
 import { formatGateDistance, formatRaceTime, type GateHuntProgress } from '../../game/gateHunt';
 import type { GameMode } from '../../game/modes';
-import { featuredMode, scoringSignals } from '../../game/modes';
+import { featuredMode } from '../../game/modes';
 import { getVehicleScore, type VehicleSpec } from '../../game/vehicles';
 
 type HudProps = {
   readonly modes: readonly GameMode[];
   readonly vehicles: readonly VehicleSpec[];
   readonly gateHuntProgress: GateHuntProgress;
+  readonly onRetryGateHunt?: () => void;
 };
 
-export function Hud({ modes, vehicles, gateHuntProgress }: HudProps) {
+export function Hud({ modes, vehicles, gateHuntProgress, onRetryGateHunt }: HudProps) {
+  const gateHeadingStyle = {
+    transform: `rotate(${gateHuntProgress.headingToGate}rad)`,
+  };
+
   return (
     <section className="hud" aria-label="Game interface">
       <header className="hud__header">
@@ -28,21 +33,29 @@ export function Hud({ modes, vehicles, gateHuntProgress }: HudProps) {
         </div>
       </header>
 
-      <div className="hud__status" aria-label="Current drive status">
-        {scoringSignals.map((signal) => (
-          <div className="stat" key={signal.label}>
-            <span>{signal.label}</span>
-            <strong>{signal.value}</strong>
-          </div>
-        ))}
-      </div>
-
       <section className="hud-panel hud-panel--mode" aria-labelledby="featured-mode">
-        <div className="panel-title">
-          <featuredMode.icon size={18} />
-          <h2 id="featured-mode">{featuredMode.label}</h2>
+        <div className="panel-title panel-title--split">
+          <div className="panel-title__label">
+            <featuredMode.icon size={18} />
+            <h2 id="featured-mode">{featuredMode.label}</h2>
+          </div>
+          <button
+            type="button"
+            className="icon-button icon-button--compact"
+            aria-label="Retry Gate Hunt"
+            onClick={onRetryGateHunt}
+          >
+            <RotateCcw size={16} />
+          </button>
         </div>
         <p>{featuredMode.summary}</p>
+        <div className="gate-focus" aria-label={`Active gate ${gateHuntProgress.activeGateId}`}>
+          <span className="gate-focus__arrow" style={gateHeadingStyle} aria-hidden="true" />
+          <strong>Gate {gateHuntProgress.activeGateId}</strong>
+          <span>
+            {gateHuntProgress.completedRuns > 0 ? `${gateHuntProgress.completedRuns} runs` : 'Run active'}
+          </span>
+        </div>
         <div className="race-strip" aria-label="Gate Hunt progress">
           <span>
             {gateHuntProgress.gatesCleared}/{gateHuntProgress.totalGates}
@@ -51,6 +64,22 @@ export function Hud({ modes, vehicles, gateHuntProgress }: HudProps) {
           <span>{formatRaceTime(gateHuntProgress.elapsedSeconds)}</span>
           <span>{formatRaceTime(gateHuntProgress.bestSeconds)}</span>
         </div>
+        {gateHuntProgress.splitTimes && gateHuntProgress.splitTimes.length > 0 && (
+          <div className="split-times" aria-label="Gate split times">
+            {gateHuntProgress.splitTimes.map((split, index) => (
+              <span key={index} className="split-item">
+                <small>G{index + 1}</small>
+                <strong>{formatRaceTime(split)}</strong>
+              </span>
+            ))}
+          </div>
+        )}
+        {gateHuntProgress.lastRunSeconds !== undefined && (
+          <div className="run-feedback" data-improved={gateHuntProgress.bestTimeImproved ? 'true' : 'false'}>
+            <strong>{gateHuntProgress.bestTimeImproved ? 'Best run' : 'Last run'}</strong>
+            <span>{formatRaceTime(gateHuntProgress.lastRunSeconds)}</span>
+          </div>
+        )}
       </section>
 
       <section className="hud-panel" aria-labelledby="modes-title">
@@ -90,6 +119,7 @@ export function Hud({ modes, vehicles, gateHuntProgress }: HudProps) {
       <footer className="hud__footer">
         <span>WASD / arrows</span>
         <span>R recover</span>
+        <span>Enter retry</span>
         <span>1/2/3 camera</span>
       </footer>
     </section>

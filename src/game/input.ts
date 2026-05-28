@@ -2,9 +2,17 @@ import type { ControlInput } from './vehicleDynamics';
 import type { GameplayCameraView } from './gameplayCamera';
 
 const activeKeys = new Set<string>();
+const pressedKeys = new Set<string>();
 
 export function bindKeyboardControls() {
-  const keydown = (event: KeyboardEvent) => activeKeys.add(event.key.toLowerCase());
+  const keydown = (event: KeyboardEvent) => {
+    const key = event.key.toLowerCase();
+    activeKeys.add(key);
+
+    if (!event.repeat) {
+      pressedKeys.add(key);
+    }
+  };
   const keyup = (event: KeyboardEvent) => activeKeys.delete(event.key.toLowerCase());
 
   window.addEventListener('keydown', keydown);
@@ -14,6 +22,7 @@ export function bindKeyboardControls() {
     window.removeEventListener('keydown', keydown);
     window.removeEventListener('keyup', keyup);
     activeKeys.clear();
+    pressedKeys.clear();
   };
 }
 
@@ -23,12 +32,14 @@ export function readKeyboardInput(): ControlInput {
   const left = activeKeys.has('a') || activeKeys.has('arrowleft');
   const right = activeKeys.has('d') || activeKeys.has('arrowright');
   const recover = activeKeys.has('r');
+  const handbrake = activeKeys.has(' ') ? 1 : 0;
 
   return {
     throttle: forward ? 1 : 0,
     brake: reverse ? 1 : 0,
     steering: Number(left) - Number(right),
     recover,
+    handbrake,
   };
 }
 
@@ -46,4 +57,14 @@ export function readCameraViewInput(): GameplayCameraView | undefined {
   }
 
   return undefined;
+}
+
+export function readGateHuntRetryInput() {
+  return consumePressedKey('enter') || consumePressedKey('t');
+}
+
+function consumePressedKey(key: string) {
+  const pressed = pressedKeys.has(key);
+  pressedKeys.delete(key);
+  return pressed;
 }

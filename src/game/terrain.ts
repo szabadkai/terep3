@@ -89,7 +89,20 @@ export function getTerrainPixelColor(x: number, z: number) {
   const cellAccent = (cellX + cellZ) % 2 === 0 ? 0.88 : 1.12;
   const shade = getSurfaceShade(surface.type, noise, diagonalBreakup, ridgeBreakup) * cellAccent;
 
-  return tintSurfaceColor(base, surface.type).multiplyScalar(shade);
+  let tinted = tintSurfaceColor(base, surface.type);
+
+  // Snow transition blending for ridge edges
+  const ridge = Math.sin((x + z) * 0.025);
+  if (surface.type === 'grass' && ridge > 0.65 && z > 2) {
+    const snowBlend = clamp((ridge - 0.65) / 0.1, 0, 1);
+    tinted = tinted.lerp(new THREE.Color('#f5fbf8'), snowBlend * 0.18);
+  }
+
+  return tinted.multiplyScalar(shade);
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
 }
 
 function tintSurfaceColor(color: THREE.Color, type: SurfaceType) {

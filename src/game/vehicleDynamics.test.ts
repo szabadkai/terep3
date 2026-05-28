@@ -167,6 +167,7 @@ describe('updateVehicleState', () => {
         roll: 2.55,
         rolloverRisk: 1,
         overturned: true,
+        recoveryCooldown: 0,
       },
       { throttle: 0, brake: 0, steering: 0, recover: true },
       vehicleCatalog[0],
@@ -178,6 +179,54 @@ describe('updateVehicleState', () => {
     expect(next.speed).toBe(0);
     expect(next.roll).toBe(0);
     expect(next.bodyHeight).toBeGreaterThan(terrainHeight(next.x, next.z) + wheelRadius);
+    expect(next.recoveryCooldown).toBeGreaterThan(0);
+    expect(next.recoveryPenalty).toBe(3);
+  });
+
+  it('respects recovery cooldown', () => {
+    const first = updateVehicleState(
+      {
+        ...initialVehicleState,
+        overturned: true,
+        rolloverRisk: 1,
+        recoveryCooldown: 0,
+      },
+      { throttle: 0, brake: 0, steering: 0, recover: true },
+      vehicleCatalog[0],
+      0.1,
+    );
+
+    expect(first.overturned).toBe(false);
+    expect(first.recoveryCooldown).toBeGreaterThan(1.5);
+
+    // Now try to recover again while cooldown is active
+    const second = updateVehicleState(
+      { ...first, overturned: true, rolloverRisk: 1 },
+      { throttle: 0, brake: 0, steering: 0, recover: true },
+      vehicleCatalog[0],
+      0.1,
+    );
+
+    expect(second.overturned).toBe(true);
+    expect(second.recoveryCooldown).toBeGreaterThan(1);
+  });
+
+  it('handbrake reduces lateral grip for slides on side-speeds', () => {
+    // Car moving with side component — handbrake should reduce grip, letting it slide more
+    const without = simulateDrive(
+      { ...initialVehicleState, velocityX: 14, velocityZ: 0, speed: 14, yaw: 0 },
+      { throttle: 0, brake: 0, steering: 0, handbrake: 0 },
+      0.5,
+    );
+    const withHandbrake = simulateDrive(
+      { ...initialVehicleState, velocityX: 14, velocityZ: 0, speed: 14, yaw: 0 },
+      { throttle: 0, brake: 0, steering: 0, handbrake: 1 },
+      0.5,
+    );
+
+    // With handbrake and sideways velocity, lateral grip is reduced
+    // so more sideways speed is retained (less deceleration)
+    expect(Math.abs(withHandbrake.velocityX)).toBeGreaterThan(Math.abs(without.velocityX));
   });
 
   it('derives pitch and roll from a diagonal four-wheel contact plane', () => {

@@ -160,10 +160,10 @@ function createVehicleMaterials() {
 
 function createMainHull(material: THREE.Material) {
   const sections: readonly Section[] = [
-    { z: 2.62, topY: -0.08, bottomY: -0.5, topHalfWidth: 0.82, bottomHalfWidth: 1.12 },
-    { z: 1.2, topY: 0.34, bottomY: -0.52, topHalfWidth: 1.04, bottomHalfWidth: 1.26 },
-    { z: -0.65, topY: 0.36, bottomY: -0.5, topHalfWidth: 1.18, bottomHalfWidth: 1.28 },
-    { z: -2.45, topY: 0.02, bottomY: -0.48, topHalfWidth: 1.0, bottomHalfWidth: 1.14 },
+    { z: 2.62, topY: -0.08, bottomY: -0.5, topHalfWidth: 0.64, bottomHalfWidth: 0.92 },
+    { z: 1.2, topY: 0.34, bottomY: -0.52, topHalfWidth: 0.82, bottomHalfWidth: 1.06 },
+    { z: -0.65, topY: 0.36, bottomY: -0.5, topHalfWidth: 0.96, bottomHalfWidth: 1.1 },
+    { z: -2.45, topY: 0.02, bottomY: -0.48, topHalfWidth: 0.8, bottomHalfWidth: 0.98 },
   ];
 
   const vertices = sections.flatMap((section) => [
@@ -192,16 +192,13 @@ function createMainHull(material: THREE.Material) {
 function createHoodPanel(material: THREE.Material) {
   return createPolygonMesh(
     [
-      [-0.86, 0.04, 2.7],
-      [0.86, 0.04, 2.7],
-      [-1.08, 0.5, 0.75],
-      [1.08, 0.5, 0.75],
-      [-0.82, 0.18, 2.42],
-      [0.82, 0.18, 2.42],
+      [-0.68, -0.12, 2.72],
+      [0.68, -0.12, 2.72],
+      [-0.86, 0.38, 0.85],
+      [0.86, 0.38, 0.85],
     ],
     [
       [0, 2, 3, 1],
-      [4, 5, 3, 2],
     ],
     material,
   );
@@ -210,10 +207,10 @@ function createHoodPanel(material: THREE.Material) {
 function createRearPanel(material: THREE.Material) {
   return createPolygonMesh(
     [
-      [-1.02, 0.24, -0.95],
-      [1.02, 0.24, -0.95],
-      [-0.82, 0.06, -2.46],
-      [0.82, 0.06, -2.46],
+      [-0.86, 0.24, -0.95],
+      [0.86, 0.24, -0.95],
+      [-0.68, 0.06, -2.46],
+      [0.68, 0.06, -2.46],
     ],
     [[0, 2, 3, 1]],
     material,
@@ -225,14 +222,14 @@ function createCabin(glassMaterial: THREE.Material) {
   cabin.add(
     createPolygonMesh(
       [
-        [-0.94, 0.5, 0.68],
-        [0.94, 0.5, 0.68],
-        [-1.04, 0.46, -0.92],
-        [1.04, 0.46, -0.92],
-        [-0.68, 1.28, 0.32],
-        [0.68, 1.28, 0.32],
-        [-0.78, 1.02, -1.05],
-        [0.78, 1.02, -1.05],
+        [-0.78, 0.5, 0.68],
+        [0.78, 0.5, 0.68],
+        [-0.86, 0.46, -0.92],
+        [0.86, 0.46, -0.92],
+        [-0.56, 1.4, 0.32],
+        [0.56, 1.4, 0.32],
+        [-0.64, 1.12, -0.96],
+        [0.64, 1.12, -0.96],
       ],
       [
         [0, 4, 5, 1],
@@ -249,7 +246,7 @@ function createCabin(glassMaterial: THREE.Material) {
 }
 
 function createSkidPlate(material: THREE.Material) {
-  const plate = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.14, 4.05), material);
+  const plate = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.14, 4.05), material);
   plate.position.set(0, -0.66, 0.05);
   plate.castShadow = true;
   return plate;
@@ -258,10 +255,10 @@ function createSkidPlate(material: THREE.Material) {
 function createNumberPanel(side: -1 | 1) {
   const number = createPolygonMesh(
     [
-      [side * 1.286, 0.19, 0.88],
-      [side * 1.192, 0.28, 0.08],
-      [side * 1.192, -0.28, 0.08],
-      [side * 1.286, -0.34, 0.88],
+      [side * 1.08, 0.19, 0.88],
+      [side * 0.98, 0.28, 0.08],
+      [side * 0.98, -0.28, 0.08],
+      [side * 1.08, -0.34, 0.88],
     ],
     [[0, 1, 2, 3]],
     createNumberMaterial(),
@@ -274,8 +271,8 @@ function createBumpers(material: THREE.Material) {
   const bumpers = new THREE.Group();
 
   [
-    [0, -0.38, 2.8, 2.86],
-    [0, -0.42, -2.58, 2.42],
+    [0, -0.38, 2.8, 2.42],
+    [0, -0.42, -2.58, 2.06],
   ].forEach(([x, y, z, width]) => {
     const bumper = new THREE.Mesh(new THREE.BoxGeometry(width, 0.18, 0.2), material);
     bumper.position.set(x, y, z);
@@ -319,13 +316,13 @@ function createFenders(bodyMaterial: THREE.Material) {
 
 function createRearDetails(accentMaterial: THREE.Material, cageMaterial: THREE.Material) {
   const details = new THREE.Group();
-  const wing = new THREE.Mesh(new THREE.BoxGeometry(2.05, 0.22, 0.28), accentMaterial);
+  const wing = new THREE.Mesh(new THREE.BoxGeometry(1.75, 0.22, 0.28), accentMaterial);
   wing.position.set(0, 0.27, -2.43);
   wing.rotation.x = -0.08;
   wing.castShadow = true;
   details.add(wing);
 
-  [-0.78, 0.78].forEach((x) => {
+  [-0.66, 0.66].forEach((x) => {
     const tail = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 0.12), cageMaterial);
     tail.position.set(x, 0.12, -2.52);
     tail.castShadow = true;

@@ -52,6 +52,15 @@ export function getSurfaceForPoint(x: number, z: number): SurfaceProfile {
     return surfaces.snow;
   }
 
+  // Snow transition zone: blend between grass and snow at ridge edges
+  if (ridge > 0.65 && z > 2) {
+    return {
+      ...surfaces.snow,
+      gripMultiplier: lerp(surfaces.grass.gripMultiplier, surfaces.snow.gripMultiplier, (ridge - 0.65) / 0.1),
+      drag: lerp(surfaces.grass.drag, surfaces.snow.drag, (ridge - 0.65) / 0.1),
+    };
+  }
+
   if (Math.abs(basin) < 0.18) {
     return surfaces.mud;
   }
@@ -61,4 +70,8 @@ export function getSurfaceForPoint(x: number, z: number): SurfaceProfile {
   }
 
   return surfaces.grass;
+}
+
+function lerp(start: number, end: number, amount: number) {
+  return start + (end - start) * amount;
 }

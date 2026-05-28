@@ -101,7 +101,8 @@ a {
   font-size: 0.82rem;
 }
 
-.hud__actions {
+.hud__actions,
+.hud-panel--mode .icon-button {
   display: flex;
   gap: 8px;
   pointer-events: auto;
@@ -122,6 +123,11 @@ a {
 
 .icon-button:hover {
   background: rgb(255 255 255 / 16%);
+}
+
+.icon-button--compact {
+  width: 32px;
+  height: 32px;
 }
 
 .hud__status {
@@ -188,6 +194,75 @@ a {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.panel-title--split {
+  justify-content: space-between;
+}
+
+.panel-title__label {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.gate-focus,
+.run-feedback {
+  display: flex;
+  align-items: center;
+  min-height: 38px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 6px;
+  background: rgb(255 255 255 / 7%);
+}
+
+.gate-focus {
+  gap: 10px;
+  padding: 8px 10px;
+}
+
+.gate-focus__arrow {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+}
+
+.gate-focus__arrow::before {
+  position: absolute;
+  top: 1px;
+  left: 8px;
+  width: 6px;
+  height: 20px;
+  border-radius: 3px 3px 1px 1px;
+  background: #ffdf45;
+  content: "";
+  clip-path: polygon(50% 0, 100% 35%, 70% 35%, 70% 100%, 30% 100%, 30% 35%, 0 35%);
+}
+
+.gate-focus strong,
+.run-feedback strong {
+  font-size: 0.82rem;
+}
+
+.gate-focus span:last-child,
+.run-feedback span {
+  margin-left: auto;
+  color: rgb(246 241 228 / 68%);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.run-feedback {
+  justify-content: space-between;
+  padding: 8px 10px;
+}
+
+.run-feedback[data-improved="true"] {
+  border-color: rgb(255 223 69 / 44%);
+  background: rgb(255 223 69 / 14%);
 }
 
 .mode-grid {
