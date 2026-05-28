@@ -15,7 +15,7 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 - [x] Body height clamped between lowest-allowed and highest-allowed bounds
 - [x] Suspension travel tracked per-frame and used for damage estimation
 - [ ] **Tune suspension on diagonal/cross-axle terrain** — current model works on pure slopes but may need asymmetric damping for crossed-up wheel pairs (one front, opposite rear)
-- [ ] **Add anti-roll bar simulation** — reduces excessive body lean on side slopes without affecting single-wheel bump compliance
+- [x] **Add anti-roll bar simulation** — reduces excessive body lean on side slopes without affecting single-wheel bump compliance
 
 ### Airborne & Landing
 - [x] Airborne state detection (body too high + not rising fast enough to re-contact)
@@ -29,7 +29,7 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 - [x] Rollover risk accumulates from combined roll stress, lateral stress, and speed stress (`calculateRolloverRisk`)
 - [x] Overturned state locks roll to extreme angle and disables controls
 - [x] Recovery: R key sets vehicle upright with zero velocity at average wheel ground height
-- [ ] **Flip detection on side slopes** — currently requires speed; add static tip-over when CG is outside wheelbase on steep terrain even at rest
+- [x] **Flip detection on side slopes** — static tip-over risk model (`staticTipOverRisk`) adds risk from steep attitudes even at rest
 - [ ] **Recovery animation/transition** — the instant snap to upright is jarring; add a brief 0.3s lerp or camera transition
 
 ### Torque, Grip, Braking
@@ -39,7 +39,7 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 - [x] Drag from surface + damage penalty
 - [x] Gradient force (gravity on slopes, 13 units)
 - [ ] **Hill-climb tuning pass** — current `climbs a repeatable grass test hill` test passes but real hills may feel weak; test on max-terrain-gradient locations (ridge areas) and adjust `hillTorque` multiplier
-- [ ] **Handbrake / slide mechanic** — add a dedicated handbrake input that locks rear wheels for tighter turns
+- [x] **Handbrake / slide mechanic** — spacebar locks rear grip for tighter slides (`handbrake` input, physics constants)
 
 ### Regression Tests
 - [x] Forward acceleration test
@@ -197,8 +197,8 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 ### Recovery
 - [x] `recoverVehicle` resets position above ground with zero velocity
 - [x] Recovery preserves damage state
-- [ ] **Recovery cooldown** — prevent spamming recovery; 2-second cooldown after recovery
-- [ ] **Recovery penalty** — add a time penalty to the Gate Hunt clock on recovery (e.g., +3 seconds)
+- [x] **Recovery cooldown** — 2-second cooldown after recovery prevents spam
+- [x] **Recovery penalty** — +3 seconds added to Gate Hunt clock on recovery
 - [ ] **Recovery animation** — brief camera shake or transition instead of instant teleport
 
 ---
