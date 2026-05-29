@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { getGameplayCameraPose, type GameplayCameraView } from '../../game/gameplayCamera';
 import { bindKeyboardControls, readCameraViewInput, readGateHuntRetryInput, readPlayerInput } from '../../game/input';
-import { createGateMarkers, createTerrainMesh, terrainHeight } from '../../game/terrain';
+import { createGateMarkers, createSceneryMeshes, createTerrainMesh, terrainHeight } from '../../game/terrain';
 import {
   gateTargets,
   initialGateHuntProgress,
@@ -48,9 +48,9 @@ export function GameScene({ onGateHuntProgress, onVehicleState, gateHuntRetrySig
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#9db6c6');
-    scene.fog = new THREE.Fog('#9db6c6', 110, 310);
+    scene.fog = new THREE.Fog('#9db6c6', 240, 900);
 
-    const camera = new THREE.PerspectiveCamera(54, mount.clientWidth / mount.clientHeight, 0.1, 520);
+    const camera = new THREE.PerspectiveCamera(54, mount.clientWidth / mount.clientHeight, 0.1, 1100);
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(mount.clientWidth, mount.clientHeight);
@@ -59,6 +59,7 @@ export function GameScene({ onGateHuntProgress, onVehicleState, gateHuntRetrySig
 
     scene.add(createLighting());
     scene.add(createTerrainMesh());
+    scene.add(createSceneryMeshes());
     const gateMarkers = createGateMarkers();
     const gateLabels = createGateLabels();
     const gateDirectionMarker = createGateDirectionMarker();
@@ -447,10 +448,10 @@ function createLighting() {
   sun.position.set(-40, 80, 34);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
-  sun.shadow.camera.left = -150;
-  sun.shadow.camera.right = 150;
-  sun.shadow.camera.top = 150;
-  sun.shadow.camera.bottom = -150;
+  sun.shadow.camera.left = -520;
+  sun.shadow.camera.right = 520;
+  sun.shadow.camera.top = 520;
+  sun.shadow.camera.bottom = -520;
   lighting.add(hemisphere, sun);
   return lighting;
 }

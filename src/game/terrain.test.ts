@@ -5,7 +5,7 @@ import { terrainHeight, getTerrainPixelColor } from './terrain';
 const surfaceSamples: Record<SurfaceType, readonly [number, number]> = {
   grass: [12, 90],
   mud: [-42, 6],
-  rock: [-102, 60],
+  rock: [-400, 320],
   snow: [-4, 94],
   water: [-10, 96],
 };

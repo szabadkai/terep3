@@ -2,10 +2,10 @@ import * as THREE from 'three';
 import { gateTargets } from './gateHunt';
 import { getSurfaceForPoint, type SurfaceType } from './surfaces';
 
-export const terrainSize = 300;
-export const playableHalfSize = 138;
+export const terrainSize = 1300;
+export const playableHalfSize = 560;
 
-const segments = 120;
+const segments = 260;
 const waterPlaneBlend = 1;
 const waterPlaneHeight = -2.4;
 
@@ -21,10 +21,11 @@ export function terrainHeight(x: number, z: number) {
 }
 
 function rawTerrainHeight(x: number, z: number) {
-  const rolling = Math.sin(x * 0.045) * 5 + Math.cos(z * 0.05) * 4;
-  const ridge = Math.sin((x + z) * 0.034) * 6;
-  const cut = Math.max(0, 10 - Math.abs(z + 34)) * -0.35;
-  return rolling + ridge + cut;
+  const rolling = Math.sin(x * 0.022) * 7.5 + Math.cos(z * 0.025) * 6.5;
+  const ridge = Math.sin((x + z) * 0.018) * 8;
+  const longRidge = Math.cos((x - z) * 0.011) * 5.5;
+  const routeCut = Math.max(0, 11 - distanceToGateRoute(x, z)) * -0.32;
+  return rolling + ridge + longRidge + routeCut;
 }
 
 export function terrainGradient(x: number, z: number) {
@@ -93,6 +94,7 @@ function addTerrainTriangle(
 
 export function getTerrainPixelColor(x: number, z: number) {
   const surface = getSurfaceForPoint(x, z);
+  const routeDistance = distanceToGateRoute(x, z);
   const base = new THREE.Color(surface.color);
   const cellX = Math.floor((x + terrainSize / 2) / 3.2);
   const cellZ = Math.floor((z + terrainSize / 2) / 3.2);
@@ -104,6 +106,11 @@ export function getTerrainPixelColor(x: number, z: number) {
 
   let tinted = tintSurfaceColor(base, surface.type);
 
+  if (routeDistance < 13 && surface.type !== 'water') {
+    const routeBlend = clamp((13 - routeDistance) / 13, 0, 1);
+    tinted = tinted.lerp(new THREE.Color(routeDistance < 5.8 ? '#8f7049' : '#a58b5f'), routeBlend * 0.82);
+  }
+
   // Snow transition blending for ridge edges
   const ridge = Math.sin((x + z) * 0.025);
   if (surface.type === 'grass' && ridge > 0.65 && z > 2) {
@@ -112,6 +119,28 @@ export function getTerrainPixelColor(x: number, z: number) {
   }
 
   return tinted.multiplyScalar(shade);
+}
+
+function distanceToGateRoute(x: number, z: number) {
+  return gateTargets.reduce((nearestDistance, gate, index) => {
+    const nextGate = gateTargets[(index + 1) % gateTargets.length];
+    return Math.min(nearestDistance, distanceToSegment(x, z, gate.x, gate.z, nextGate.x, nextGate.z));
+  }, Number.POSITIVE_INFINITY);
+}
+
+function distanceToSegment(px: number, pz: number, ax: number, az: number, bx: number, bz: number) {
+  const segmentX = bx - ax;
+  const segmentZ = bz - az;
+  const segmentLengthSq = segmentX * segmentX + segmentZ * segmentZ;
+
+  if (segmentLengthSq === 0) {
+    return Math.hypot(px - ax, pz - az);
+  }
+
+  const amount = clamp(((px - ax) * segmentX + (pz - az) * segmentZ) / segmentLengthSq, 0, 1);
+  const closestX = ax + segmentX * amount;
+  const closestZ = az + segmentZ * amount;
+  return Math.hypot(px - closestX, pz - closestZ);
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -192,4 +221,70 @@ export function createGateMarkers() {
   });
 
   return gateGroup;
+}
+
+export function createSceneryMeshes() {
+  const scenery = new THREE.Group();
+  const trunkMaterial = new THREE.MeshStandardMaterial({ color: '#5e4730', roughness: 0.86 });
+  const pineMaterial = new THREE.MeshStandardMaterial({ color: '#285c43', roughness: 0.9 });
+  const birchMaterial = new THREE.MeshStandardMaterial({ color: '#ccd4c8', roughness: 0.88 });
+  const rockMaterial = new THREE.MeshStandardMaterial({ color: '#7e7a70', roughness: 0.95 });
+
+  for (let index = 0; index < 150; index += 1) {
+    const x = seededRange(index, 17, -playableHalfSize + 18, playableHalfSize - 18);
+    const z = seededRange(index, 43, -playableHalfSize + 18, playableHalfSize - 18);
+
+    if (distanceToGateRoute(x, z) < 26 || getSurfaceForPoint(x, z).type === 'water') {
+      continue;
+    }
+
+    const tree = createTree(x, z, index % 5 === 0 ? birchMaterial : pineMaterial, trunkMaterial);
+    scenery.add(tree);
+  }
+
+  for (let index = 0; index < 58; index += 1) {
+    const x = seededRange(index, 101, -playableHalfSize + 24, playableHalfSize - 24);
+    const z = seededRange(index, 149, -playableHalfSize + 24, playableHalfSize - 24);
+
+    if (distanceToGateRoute(x, z) < 18 || getSurfaceForPoint(x, z).type === 'water') {
+      continue;
+    }
+
+    const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(seededRange(index, 23, 1.4, 3.8), 0), rockMaterial);
+    rock.position.set(x, terrainHeight(x, z) + 0.8, z);
+    rock.rotation.set(seededRange(index, 31, 0, Math.PI), seededRange(index, 47, 0, Math.PI), 0);
+    rock.scale.y = seededRange(index, 59, 0.55, 1.25);
+    rock.castShadow = true;
+    rock.receiveShadow = true;
+    scenery.add(rock);
+  }
+
+  return scenery;
+}
+
+function createTree(
+  x: number,
+  z: number,
+  crownMaterial: THREE.Material,
+  trunkMaterial: THREE.Material,
+) {
+  const tree = new THREE.Group();
+  const height = seededRange(Math.round(x), Math.round(z), 5.4, 9.8);
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.52, height * 0.42, 5), trunkMaterial);
+  const crown = new THREE.Mesh(new THREE.ConeGeometry(height * 0.28, height * 0.78, 7), crownMaterial);
+
+  trunk.position.y = height * 0.21;
+  crown.position.y = height * 0.66;
+  tree.position.set(x, terrainHeight(x, z), z);
+  tree.rotation.y = seededRange(Math.round(x), Math.round(z) + 9, 0, Math.PI * 2);
+  tree.add(trunk, crown);
+  tree.traverse((object) => {
+    object.castShadow = true;
+  });
+
+  return tree;
+}
+
+function seededRange(index: number, salt: number, min: number, max: number) {
+  return min + seededTerrainNoise(index * 13 + salt, index * 29 - salt) * (max - min);
 }

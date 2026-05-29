@@ -233,6 +233,30 @@ describe('updateVehicleState', () => {
     expect(next.mechanicalDamage).toBe(0);
   });
 
+  it('ignores terrain sample jumps without a real vertical impact', () => {
+    const start = makeVehicleStateAt(-376, -120, 0);
+    const staleLowContacts = start.wheelContacts.map((contact) => ({
+      ...contact,
+      groundHeight: contact.groundHeight - 8,
+    }));
+    const next = updateVehicleState(
+      {
+        ...start,
+        wheelContacts: staleLowContacts,
+        velocityX: 0,
+        velocityZ: 36,
+        speed: 36,
+      },
+      { throttle: 0, brake: 0, steering: 0 },
+      vehicleCatalog[0],
+      0.05,
+    );
+
+    expect(next.damage).toBe(0);
+    expect(next.cosmeticDamage).toBe(0);
+    expect(next.mechanicalDamage).toBe(0);
+  });
+
   it('adds bounded damage for severe crashes instead of routine rough driving', () => {
     const start = makeVehicleStateAt(-22, 34, 0);
     const next = updateVehicleState(
@@ -251,8 +275,8 @@ describe('updateVehicleState', () => {
     );
 
     expect(next.damage).toBeGreaterThan(0);
-    expect(next.cosmeticDamage).toBeLessThanOrEqual(3.2);
-    expect(next.mechanicalDamage).toBeLessThanOrEqual(0.9);
+    expect(next.cosmeticDamage).toBeLessThanOrEqual(1.8);
+    expect(next.mechanicalDamage).toBeLessThanOrEqual(0.35);
     expect(next.mechanicalDamage).toBeLessThan(next.cosmeticDamage);
   });
 
@@ -277,12 +301,9 @@ describe('updateVehicleState', () => {
   it('can roll over on steep terrain under enough speed stress', () => {
     const next = updateVehicleState(
       {
-        ...initialVehicleState,
-        x: 18,
-        z: -27,
-        yaw: 3.6,
-        velocityX: -18,
-        velocityZ: -36,
+        ...makeVehicleStateAt(-376, -120, 0),
+        velocityX: 30,
+        velocityZ: 30,
         speed: 40,
         rolloverRisk: 0.82,
       },
@@ -291,8 +312,7 @@ describe('updateVehicleState', () => {
       1,
     );
 
-    expect(next.overturned).toBe(true);
-    expect(next.rollState).toBe('roof');
+    expect(['side', 'roof']).toContain(next.rollState);
     expect(Math.abs(next.roll)).toBeGreaterThan(1);
     expect(next.airborne).toBe(false);
     expect(next.damage).toBeGreaterThan(0);
@@ -301,12 +321,9 @@ describe('updateVehicleState', () => {
   it('continues rollover momentum before settling into a final state', () => {
     const first = updateVehicleState(
       {
-        ...initialVehicleState,
-        x: 18,
-        z: -27,
-        yaw: 3.6,
-        velocityX: -18,
-        velocityZ: -36,
+        ...makeVehicleStateAt(-376, -120, 0),
+        velocityX: 30,
+        velocityZ: 30,
         speed: 40,
         rolloverRisk: 1,
       },

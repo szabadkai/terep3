@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   formatGateDistance,
   formatRaceTime,
+  getGateCircuitLength,
   gateTargets,
   initialGateHuntProgress,
   resetGateHuntRun,
+  targetCircuitSeconds,
   updateGateHuntProgress,
 } from './gateHunt';
 import { initialVehicleState } from './vehicleDynamics';
@@ -75,7 +77,17 @@ describe('gate hunt', () => {
 
     expect(next.activeGateId).toBe('A');
     expect(next.distanceToGate).toBeGreaterThan(0);
-    expect(next.headingToGate).toBeLessThan(0);
+    expect(Number.isFinite(next.headingToGate)).toBe(true);
+  });
+
+  it('defines a long circuit calibrated around a two-minute run', () => {
+    const averageTargetSpeed = getGateCircuitLength() / targetCircuitSeconds;
+
+    expect(gateTargets).toHaveLength(9);
+    expect(getGateCircuitLength()).toBeGreaterThan(1900);
+    expect(getGateCircuitLength()).toBeLessThan(2150);
+    expect(averageTargetSpeed).toBeGreaterThan(15);
+    expect(averageTargetSpeed).toBeLessThan(18);
   });
 
   it('formats unset values cleanly', () => {

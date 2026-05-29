@@ -27,13 +27,25 @@ export type GateHuntProgress = {
 };
 
 export const gateTargets: readonly GateTarget[] = [
-  { id: 'A', x: -74, z: -58 },
-  { id: 'B', x: -34, z: 8 },
-  { id: 'C', x: 26, z: -24 },
-  { id: 'D', x: 78, z: 42 },
-  { id: 'E', x: 12, z: 92 },
-  { id: 'F', x: -82, z: 70 },
+  { id: 'A', x: -285, z: -230 },
+  { id: 'B', x: -75, z: -315 },
+  { id: 'C', x: 160, z: -260 },
+  { id: 'D', x: 315, z: -70 },
+  { id: 'E', x: 245, z: 190 },
+  { id: 'F', x: 20, z: 315 },
+  { id: 'G', x: -230, z: 250 },
+  { id: 'H', x: -355, z: -15 },
+  { id: 'I', x: -330, z: -190 },
 ] as const;
+
+export const targetCircuitSeconds = 120;
+
+export function getGateCircuitLength() {
+  return gateTargets.reduce((length, gate, index) => {
+    const nextGate = gateTargets[(index + 1) % gateTargets.length];
+    return length + Math.hypot(gate.x - nextGate.x, gate.z - nextGate.z);
+  }, 0);
+}
 
 export const initialGateHuntProgress: GateHuntProgress = {
   activeGateIndex: 0,

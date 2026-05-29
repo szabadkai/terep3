@@ -69,17 +69,17 @@ export type WheelContact = {
 
 /** Initial vehicle placement near the start area. */
 export const initialVehicleState: VehicleState = {
-  x: -58,
-  z: -46,
-  yaw: 0.72,
+  x: -318,
+  z: -260,
+  yaw: 0.83,
   velocityX: 0,
   velocityZ: 0,
-  bodyHeight: terrainHeight(-58, -46) + 1.35,
+  bodyHeight: terrainHeight(-318, -260) + 1.35,
   verticalVelocity: 0,
   pitch: 0,
   roll: 0,
   suspensionTravel: 0,
-  wheelContacts: makeWheelContacts(-58, -46, 0.72),
+  wheelContacts: makeWheelContacts(-318, -260, 0.83),
   airborne: false,
   speed: 0,
   rolloverRisk: 0,
@@ -328,16 +328,18 @@ function estimateImpactDamage(
   vehicle: VehicleSpec,
 ) {
   const impactSpeed = Math.abs(speed);
-
-  if (impactSpeed < p.damageMinSpeed) {
-    return { cosmetic: 0, mechanical: 0 };
-  }
-
   const previousGround = averageGroundHeight(previous.wheelContacts);
   const currentGround = averageGroundHeight(suspension.wheelContacts);
   const terrainStep = Math.abs(currentGround - previousGround);
-  const bottomOut = Math.max(0, suspension.suspensionTravel - p.damageBottomOutThreshold);
-  const slopeHit = suspension.suspensionTravel > 0.55 ? Math.max(0, terrainStep - p.damageSlopeHitThreshold) : 0;
+  const verticalImpulse = Math.max(0, suspension.verticalVelocity - previous.verticalVelocity);
+  const groundedTerrainHit =
+    !previous.airborne &&
+    impactSpeed >= p.damageMinSpeed &&
+    suspension.suspensionTravel > 0.68 &&
+    verticalImpulse > p.damageVerticalImpulseThreshold;
+  const bottomOut =
+    groundedTerrainHit || previous.airborne ? Math.max(0, suspension.suspensionTravel - p.damageBottomOutThreshold) : 0;
+  const slopeHit = groundedTerrainHit ? Math.max(0, terrainStep - p.damageSlopeHitThreshold) : 0;
   const hardLanding = previous.airborne ? Math.max(0, -previous.verticalVelocity - p.damageLandingThreshold) : 0;
 
   if (slopeHit <= 0 && bottomOut <= 0 && hardLanding <= 0) {
@@ -345,12 +347,13 @@ function estimateImpactDamage(
   }
 
   const durabilityScale = clamp(10 / Math.max(vehicle.durability, 1), 0.65, 1.8);
-  const speedScale = clamp((impactSpeed - p.damageMinSpeed) / p.damageSpeedRamp, 0.15, 1);
+  const landingSpeed = previous.airborne ? Math.max(impactSpeed, -previous.verticalVelocity * 1.45) : impactSpeed;
+  const speedScale = clamp((landingSpeed - p.damageMinSpeed) / p.damageSpeedRamp, 0.1, 1);
   const baseDamage =
     (slopeHit * p.damageSlopeMultiplier +
       bottomOut * p.damageBottomOutMultiplier +
       hardLanding * p.damageLandingMultiplier) *
-    impactSpeed *
+    landingSpeed *
     speedScale *
     durabilityScale *
     100;

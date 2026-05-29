@@ -1,6 +1,7 @@
 import { Code2, RotateCcw, Wrench } from 'lucide-react';
 import { formatGateDistance, formatRaceTime, gateTargets, type GateHuntProgress } from '../../game/gateHunt';
 import { featuredMode } from '../../game/modes';
+import { playableHalfSize } from '../../game/terrain';
 import type { VehicleState } from '../../game/vehicleDynamics';
 
 type HudProps = {
@@ -111,14 +112,19 @@ function RouteMap({
   readonly gateHuntProgress: GateHuntProgress;
   readonly vehicleState: VehicleState;
 }) {
+  const mapPadding = 8;
+  const mapWidth = 160;
+  const mapHeight = 106;
+  const mapWorldSize = playableHalfSize * 2;
   const worldToMap = (x: number, z: number) => ({
-    x: 10 + ((x + 120) / 240) * 140,
-    y: 10 + ((120 - z) / 240) * 86,
+    x: mapPadding + ((x + playableHalfSize) / mapWorldSize) * (mapWidth - mapPadding * 2),
+    y: mapPadding + ((playableHalfSize - z) / mapWorldSize) * (mapHeight - mapPadding * 2),
   });
   const vehiclePoint = worldToMap(vehicleState.x, vehicleState.z);
   const activeGate = gateTargets[gateHuntProgress.activeGateIndex];
   const activePoint = worldToMap(activeGate.x, activeGate.z);
   const routePoints = gateTargets
+    .concat(gateTargets[0])
     .map((gate) => worldToMap(gate.x, gate.z))
     .map((point) => `${point.x},${point.y}`)
     .join(' ');
