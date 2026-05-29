@@ -181,24 +181,24 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 - [x] Damage affects vehicle drag (`state.damage * 0.012` added to drag)
 - [x] Damage clamped to 0-100 range
 - [x] **Differentiate damage types** — separate cosmetic damage from mechanical damage; mechanical damage only applies mild acceleration/drag penalties
-- [~] **Damage thresholds** — replaced hard handling thresholds with a gentle continuous acceleration penalty
+- [x] **Damage thresholds** — replaced hard handling thresholds with a gentle continuous acceleration penalty and explicit HUD severity bands
 - [x] **HUD damage indicator** — show current damage as a bar or percentage in the HUD
 
 ### Visual Damage
 - [x] **Panel deformation states** — create 2-3 levels of dented geometry variants for hood, doors, and roof that swap in based on damage level
-- [ ] **Bumper detachment** — at high damage, bumpers should visibly hang or detach
-- [ ] **Broken glass** — add crack texture overlay on cabin glass at moderate damage
-- [ ] **Wheel damage visuals** — bent wheel geometry or wobble animation at high damage
-- [ ] **Smoke/steam particles** — add engine smoke particles that increase with damage level
+- [x] **Bumper detachment** — at high damage, bumpers visibly sag and swap to detached/hanging damage geometry
+- [x] **Broken glass** — crack overlay appears on cabin glass at moderate cosmetic damage
+- [x] **Wheel damage visuals** — high cosmetic damage adds wheel wobble and bent-wheel squash
+- [x] **Smoke/steam particles** — engine smoke particles appear and intensify with mechanical damage
 
 ### Flip & Roll Logic
 - [x] Rollover risk accumulation → overturn state
 - [x] Overturned vehicles cannot drive
 - [x] Recovery input (R key)
-- [~] **Fix vertical wall climbing** — first steep-contact blocker added; still needs playtesting and deflection tuning for wall-like terrain faces
-- [~] **Make rollovers achievable** — rollover thresholds lowered; still needs momentum continuation and bad-landing roll behavior
-- [ ] **Partial roll states** — distinguish between "on side" (can self-right with throttle + steering), "on roof" (needs recovery), and "end-over-end" (full flip)
-- [ ] **Roll momentum continuation** — currently once `overturned` is true, the car locks; allow the car to continue rolling through a full flip and potentially land back on wheels naturally
+- [x] **Fix vertical wall climbing** — steep contact now blocks climb attempts and deflects velocity along the wall face
+- [x] **Make rollovers achievable** — rollover thresholds feed a momentum-based flip state with rollover damage
+- [x] **Partial roll states** — distinguish between "on side" (can self-right with throttle + steering), "on roof" (needs recovery), and "end-over-end" (full flip)
+- [x] **Roll momentum continuation** — rollover state keeps angular momentum through a flip before settling on wheels, side, or roof
 
 ### Recovery
 - [x] `recoverVehicle` resets position above ground with zero velocity

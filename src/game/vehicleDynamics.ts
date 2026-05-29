@@ -21,6 +21,8 @@ export type ControlInput = {
   readonly handbrake?: number;
 };
 
+export type RollState = 'upright' | 'side' | 'roof' | 'flipping';
+
 /**
  * Full driveable state of the vehicle, suitable for rendering and network sync.
  */
@@ -39,6 +41,9 @@ export type VehicleState = {
   readonly airborne: boolean;
   readonly speed: number;
   readonly rolloverRisk: number;
+  readonly rollState: RollState;
+  readonly rollVelocity: number;
+  readonly pitchVelocity: number;
   readonly overturned: boolean;
   readonly damage: number;
   readonly cosmeticDamage: number;
@@ -78,6 +83,9 @@ export const initialVehicleState: VehicleState = {
   airborne: false,
   speed: 0,
   rolloverRisk: 0,
+  rollState: 'upright',
+  rollVelocity: 0,
+  pitchVelocity: 0,
   overturned: false,
   damage: 0,
   cosmeticDamage: 0,
@@ -107,8 +115,14 @@ export function updateVehicleState(
   vehicle: VehicleSpec,
   deltaSeconds: number,
 ): VehicleState {
-  if (state.overturned && state.recoveryCooldown <= 0 && wantsRecovery(input)) {
+  const currentRollState = getRollState(state);
+
+  if (currentRollState === 'roof' && state.recoveryCooldown <= 0 && input.recover) {
     return recoverVehicle(state);
+  }
+
+  if (currentRollState === 'side' && state.recoveryCooldown <= 0 && wantsSelfRight(input, state.roll)) {
+    return selfRightVehicle(state);
   }
 
   const surface = getSurfaceForPoint(state.x, state.z);
@@ -122,7 +136,7 @@ export function updateVehicleState(
   const forwardSpeed = state.velocityX * forwardX + state.velocityZ * forwardZ;
   const sideSpeed = state.velocityX * rightX + state.velocityZ * rightZ;
   const reverseIntent = input.brake > 0 && forwardSpeed < p.reverseSpeedThreshold;
-  const disabledControlScale = state.overturned ? 0 : 1;
+  const disabledControlScale = currentRollState === 'roof' ? 0 : 1;
   const handbrake = (input.handbrake ?? 0) * disabledControlScale;
 
   const brakeForce = reverseIntent ? 0 : input.brake * p.brakeForce;
@@ -199,8 +213,18 @@ export function updateVehicleState(
   if (climbImpact.blocked) {
     boundedX = state.x;
     boundedZ = state.z;
-    velocityX *= p.climbImpactRetain;
-    velocityZ *= p.climbImpactRetain;
+    const intoWallSpeed = velocityX * climbImpact.normalX + velocityZ * climbImpact.normalZ;
+
+    if (intoWallSpeed > 0) {
+      const tangentX = velocityX - climbImpact.normalX * intoWallSpeed;
+      const tangentZ = velocityZ - climbImpact.normalZ * intoWallSpeed;
+      velocityX = tangentX * p.climbImpactSlideRetain + climbImpact.normalX * intoWallSpeed * p.climbImpactRetain;
+      velocityZ = tangentZ * p.climbImpactSlideRetain + climbImpact.normalZ * intoWallSpeed * p.climbImpactRetain;
+    } else {
+      velocityX *= p.climbImpactRetain;
+      velocityZ *= p.climbImpactRetain;
+    }
+
     speed = Math.hypot(velocityX, velocityZ);
     signedSpeed = velocityX * forwardX + velocityZ * forwardZ;
   }
@@ -208,16 +232,10 @@ export function updateVehicleState(
   const suspension = solveSuspension(state, boundedX, boundedZ, velocityX, velocityZ, yaw, vehicle, deltaSeconds);
   const impactDamage = estimateImpactDamage(state, suspension, speed, vehicle);
   const rolloverRisk = calculateRolloverRisk(state, suspension, sideSpeed, speed, deltaSeconds);
-  const overturned = state.overturned || rolloverRisk >= 1;
-  const rolloverDamage = overturned && !state.overturned ? { cosmetic: 2, mechanical: 1 } : { cosmetic: 0, mechanical: 0 };
+  const rollDynamics = resolveRollDynamics(state, suspension, input, sideSpeed, speed, rolloverRisk, deltaSeconds);
+  const rolloverDamage = rollDynamics.startedFlip ? { cosmetic: 2, mechanical: 1 } : { cosmetic: 0, mechanical: 0 };
   const cosmeticDamage = clamp(state.cosmeticDamage + impactDamage.cosmetic + rolloverDamage.cosmetic, 0, 100);
   const mechanicalDamage = clamp(state.mechanicalDamage + impactDamage.mechanical + rolloverDamage.mechanical, 0, 100);
-  const resolvedPitch = overturned
-    ? lerp(suspension.pitch, Math.sign(suspension.pitch || state.pitch || 1) * p.overturnedPitch, p.overturnedPitchLerp)
-    : suspension.pitch;
-  const resolvedRoll = overturned
-    ? Math.sign(suspension.roll || state.roll || sideSpeed || 1) * p.overturnedRoll
-    : suspension.roll;
 
   return {
     x: boundedX,
@@ -227,14 +245,17 @@ export function updateVehicleState(
     velocityZ,
     bodyHeight: suspension.bodyHeight,
     verticalVelocity: suspension.verticalVelocity,
-    pitch: resolvedPitch,
-    roll: resolvedRoll,
+    pitch: rollDynamics.pitch,
+    roll: rollDynamics.roll,
     suspensionTravel: suspension.suspensionTravel,
     wheelContacts: suspension.wheelContacts,
-    airborne: overturned ? false : suspension.airborne,
+    airborne: rollDynamics.overturned ? false : suspension.airborne,
     speed: signedSpeed,
-    rolloverRisk: overturned ? 1 : rolloverRisk,
-    overturned,
+    rolloverRisk: rollDynamics.rollState === 'upright' ? rolloverRisk : 1,
+    rollState: rollDynamics.rollState,
+    rollVelocity: rollDynamics.rollVelocity,
+    pitchVelocity: rollDynamics.pitchVelocity,
+    overturned: rollDynamics.overturned,
     damage: Math.max(cosmeticDamage, mechanicalDamage),
     cosmeticDamage,
     mechanicalDamage,
@@ -276,6 +297,9 @@ function recoverVehicle(state: VehicleState): VehicleState {
     verticalVelocity: 0,
     pitch: 0,
     roll: 0,
+    rollState: 'upright',
+    rollVelocity: 0,
+    pitchVelocity: 0,
     suspensionTravel: 0,
     wheelContacts,
     airborne: false,
@@ -284,6 +308,16 @@ function recoverVehicle(state: VehicleState): VehicleState {
     overturned: false,
     recoveryCooldown: 2,
     recoveryPenalty: state.recoveryPenalty + 3,
+  };
+}
+
+function selfRightVehicle(state: VehicleState): VehicleState {
+  const recovered = recoverVehicle(state);
+
+  return {
+    ...recovered,
+    recoveryCooldown: 0.8,
+    recoveryPenalty: state.recoveryPenalty,
   };
 }
 
@@ -320,29 +354,149 @@ function estimateImpactDamage(
     speedScale *
     durabilityScale *
     100;
+  const mechanicalSeverity = clamp((baseDamage - 1.8) / 5.4, 0, 1);
 
   return {
     cosmetic: Math.min(baseDamage * 1.15, p.damageCosmeticImpactCap),
-    mechanical: Math.min(baseDamage * 0.42, p.damageMechanicalImpactCap),
+    mechanical: Math.min(baseDamage * 0.18 * mechanicalSeverity, p.damageMechanicalImpactCap),
   };
 }
 
-function wantsRecovery(input: ControlInput) {
-  return Boolean(input.recover) || input.throttle > 0 || input.brake > 0 || input.steering !== 0 || (input.handbrake ?? 0) > 0;
+function wantsSelfRight(input: ControlInput, roll: number) {
+  const steeringIntoUpright = Math.sign(input.steering || 0) === -Math.sign(roll || 1);
+  return input.throttle > 0.2 && steeringIntoUpright;
 }
 
 function calculateClimbImpact(state: VehicleState, x: number, z: number, yaw: number, speed: number) {
-  if (speed < p.climbImpactMinSpeed || state.airborne || state.overturned) {
-    return { blocked: false };
+  if (speed < p.climbImpactMinSpeed || state.airborne || getRollState(state) === 'roof') {
+    return { blocked: false, normalX: 0, normalZ: 0 };
   }
 
   const previousGround = averageGroundHeight(state.wheelContacts);
   const nextGround = averageGroundHeight(makeWheelContacts(x, z, yaw));
   const climbStep = nextGround - previousGround;
 
+  if (climbStep <= p.maxClimbStep) {
+    return { blocked: false, normalX: 0, normalZ: 0 };
+  }
+
+  const gradient = terrainGradient(x, z);
+  const gradientLength = Math.hypot(gradient.x, gradient.z) || 1;
+
   return {
-    blocked: climbStep > p.maxClimbStep,
+    blocked: true,
+    normalX: gradient.x / gradientLength,
+    normalZ: gradient.z / gradientLength,
   };
+}
+
+function resolveRollDynamics(
+  state: VehicleState,
+  suspension: ReturnType<typeof solveSuspension>,
+  input: ControlInput,
+  sideSpeed: number,
+  speed: number,
+  rolloverRisk: number,
+  deltaSeconds: number,
+) {
+  const previousRollState = getRollState(state);
+  const startedFlip = previousRollState === 'upright' && rolloverRisk >= 1;
+  const rollSign = Math.sign(sideSpeed || suspension.roll || state.roll || 1);
+
+  if (previousRollState === 'roof' && !startedFlip) {
+    return {
+      pitch: lerp(suspension.pitch, Math.sign(suspension.pitch || state.pitch || 1) * p.overturnedPitch, p.overturnedPitchLerp),
+      roll: Math.sign(state.roll || suspension.roll || 1) * p.overturnedRoll,
+      rollState: 'roof' as const,
+      rollVelocity: 0,
+      pitchVelocity: 0,
+      overturned: true,
+      startedFlip: false,
+    };
+  }
+
+  if (startedFlip || previousRollState === 'flipping') {
+    const initialRollVelocity = rollSign * (p.rollMomentumBase + clamp(Math.abs(sideSpeed) / 12, 0, 1.4));
+    const initialPitchVelocity =
+      Math.sign(suspension.pitch || state.pitch || 1) *
+      clamp((Math.abs(suspension.pitch) - p.rolloverPitchThreshold) * p.flipPitchVelocityScale, 0, p.flipPitchVelocityMax);
+    const rawRollVelocity = startedFlip ? initialRollVelocity : state.rollVelocity;
+    const rawPitchVelocity = startedFlip ? initialPitchVelocity : state.pitchVelocity;
+    const damping = Math.max(0, 1 - p.rollMomentumDamping * deltaSeconds);
+    const rollVelocity = rawRollVelocity * damping;
+    const pitchVelocity = rawPitchVelocity * damping;
+    const roll = state.roll + rawRollVelocity * deltaSeconds;
+    const pitch = state.pitch + rawPitchVelocity * deltaSeconds;
+    const normalizedRoll = normalizeAngle(roll);
+    const absRoll = Math.abs(normalizedRoll);
+    const selfRightingInput = wantsSelfRight(input, normalizedRoll);
+
+    if (Math.abs(rollVelocity) > p.rollMomentumSettleVelocity) {
+      return {
+        pitch,
+        roll,
+        rollState: 'flipping' as const,
+        rollVelocity,
+        pitchVelocity,
+        overturned: false,
+        startedFlip,
+      };
+    }
+
+    if (absRoll >= p.roofRollThreshold) {
+      return {
+        pitch: lerp(suspension.pitch, Math.sign(pitch || 1) * p.overturnedPitch, p.overturnedPitchLerp),
+        roll: Math.sign(normalizedRoll || 1) * p.overturnedRoll,
+        rollState: 'roof' as const,
+        rollVelocity: 0,
+        pitchVelocity: 0,
+        overturned: true,
+        startedFlip,
+      };
+    }
+
+    if (absRoll >= p.sideRollThreshold && !selfRightingInput) {
+      return {
+        pitch: lerp(suspension.pitch, pitch, 0.5),
+        roll: Math.sign(normalizedRoll || 1) * p.sideRestRoll,
+        rollState: 'side' as const,
+        rollVelocity: 0,
+        pitchVelocity: 0,
+        overturned: false,
+        startedFlip,
+      };
+    }
+  }
+
+  if (previousRollState === 'side' && !wantsSelfRight(input, state.roll)) {
+    return {
+      pitch: suspension.pitch,
+      roll: Math.sign(state.roll || 1) * p.sideRestRoll,
+      rollState: 'side' as const,
+      rollVelocity: 0,
+      pitchVelocity: 0,
+      overturned: false,
+      startedFlip: false,
+    };
+  }
+
+  return {
+    pitch: suspension.pitch,
+    roll: suspension.roll,
+    rollState: 'upright' as const,
+    rollVelocity: 0,
+    pitchVelocity: 0,
+    overturned: false,
+    startedFlip,
+  };
+}
+
+function getRollState(state: VehicleState): RollState {
+  return state.overturned ? 'roof' : (state.rollState ?? 'upright');
+}
+
+function normalizeAngle(angle: number) {
+  return Math.atan2(Math.sin(angle), Math.cos(angle));
 }
 
 function solveSuspension(

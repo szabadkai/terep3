@@ -69,6 +69,8 @@ export const physics = {
   climbImpactMinSpeed: 4,
   /** Velocity retained after hitting terrain too steep to climb */
   climbImpactRetain: -0.12,
+  /** Tangential velocity retained when scraping along a wall-like terrain face */
+  climbImpactSlideRetain: 0.62,
 
   /** Airborne detection: body must be above target by this margin and not falling fast */
   airborneHeightMargin: 0.48,
@@ -142,29 +144,39 @@ export const physics = {
   overturnedRoll: 2.55,
   overturnedPitch: 1.1,
   overturnedPitchLerp: 0.55,
+  /** Partial rollover angle used when the vehicle settles on its side */
+  sideRestRoll: 1.42,
+  sideRollThreshold: 0.92,
+  roofRollThreshold: 2.3,
+  /** Roll momentum after crossing the rollover threshold */
+  rollMomentumBase: 3.4,
+  rollMomentumDamping: 1.35,
+  rollMomentumSettleVelocity: 0.6,
+  flipPitchVelocityScale: 5,
+  flipPitchVelocityMax: 2.4,
 
   /** Damage: drag penalty per damage point */
   damageDragPerPoint: 0.006,
   /** Damage: minimum speed for impact */
-  damageMinSpeed: 16,
+  damageMinSpeed: 24,
   /** Damage: speed range where terrain impacts ramp from minor to full force */
-  damageSpeedRamp: 24,
+  damageSpeedRamp: 34,
   /** Damage: slope hit threshold (height difference) */
-  damageSlopeHitThreshold: 2.4,
+  damageSlopeHitThreshold: 3.4,
   /** Damage: bottom-out threshold */
-  damageBottomOutThreshold: 0.86,
+  damageBottomOutThreshold: 0.94,
   /** Damage: hard landing threshold from downward velocity */
-  damageLandingThreshold: 6.4,
+  damageLandingThreshold: 11.5,
   /** Damage: slope hit multiplier */
-  damageSlopeMultiplier: 0.01,
+  damageSlopeMultiplier: 0.005,
   /** Damage: bottom-out multiplier */
-  damageBottomOutMultiplier: 0.026,
+  damageBottomOutMultiplier: 0.008,
   /** Damage: hard landing multiplier */
-  damageLandingMultiplier: 0.012,
+  damageLandingMultiplier: 0.0055,
   /** Damage: maximum cosmetic damage from one impact frame */
-  damageCosmeticImpactCap: 7.5,
+  damageCosmeticImpactCap: 3.2,
   /** Damage: maximum mechanical damage from one impact frame */
-  damageMechanicalImpactCap: 3,
+  damageMechanicalImpactCap: 0.9,
 
   /** Wheel contact sampling */
   wheelContactForwardSamples: [-0.92, -0.7, -0.46, -0.23, 0, 0.23, 0.46, 0.7, 0.92] as readonly number[],

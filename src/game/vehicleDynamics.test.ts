@@ -210,7 +210,7 @@ describe('updateVehicleState', () => {
     expect(next.verticalVelocity).toBeGreaterThan(-5);
   });
 
-  it('adds bounded damage for hard landings instead of a runaway wreck', () => {
+  it('does not punish routine landings with damage', () => {
     const start = makeVehicleStateAt(-22, 34, 0);
     const next = updateVehicleState(
       {
@@ -227,9 +227,32 @@ describe('updateVehicleState', () => {
       0.05,
     );
 
+    expect(next.airborne).toBe(false);
+    expect(next.damage).toBe(0);
+    expect(next.cosmeticDamage).toBe(0);
+    expect(next.mechanicalDamage).toBe(0);
+  });
+
+  it('adds bounded damage for severe crashes instead of routine rough driving', () => {
+    const start = makeVehicleStateAt(-22, 34, 0);
+    const next = updateVehicleState(
+      {
+        ...start,
+        airborne: true,
+        bodyHeight: start.bodyHeight + 0.08,
+        verticalVelocity: -18,
+        velocityX: 0,
+        velocityZ: 34,
+        speed: 34,
+      },
+      { throttle: 0, brake: 0, steering: 0 },
+      vehicleCatalog[0],
+      0.05,
+    );
+
     expect(next.damage).toBeGreaterThan(0);
-    expect(next.cosmeticDamage).toBeLessThanOrEqual(7.5);
-    expect(next.mechanicalDamage).toBeLessThanOrEqual(3);
+    expect(next.cosmeticDamage).toBeLessThanOrEqual(3.2);
+    expect(next.mechanicalDamage).toBeLessThanOrEqual(0.9);
     expect(next.mechanicalDamage).toBeLessThan(next.cosmeticDamage);
   });
 
@@ -269,9 +292,63 @@ describe('updateVehicleState', () => {
     );
 
     expect(next.overturned).toBe(true);
+    expect(next.rollState).toBe('roof');
     expect(Math.abs(next.roll)).toBeGreaterThan(1);
     expect(next.airborne).toBe(false);
     expect(next.damage).toBeGreaterThan(0);
+  });
+
+  it('continues rollover momentum before settling into a final state', () => {
+    const first = updateVehicleState(
+      {
+        ...initialVehicleState,
+        x: 18,
+        z: -27,
+        yaw: 3.6,
+        velocityX: -18,
+        velocityZ: -36,
+        speed: 40,
+        rolloverRisk: 1,
+      },
+      { throttle: 1, brake: 0, steering: 0 },
+      vehicleCatalog[0],
+      0.05,
+    );
+
+    expect(first.rollState).toBe('flipping');
+    expect(first.overturned).toBe(false);
+    expect(Math.abs(first.rollVelocity)).toBeGreaterThan(0.6);
+  });
+
+  it('distinguishes side-rest from roof-rest rollover states', () => {
+    const side = updateVehicleState(
+      {
+        ...initialVehicleState,
+        roll: 1.25,
+        rollState: 'side',
+        rolloverRisk: 1,
+      },
+      { throttle: 0, brake: 0, steering: 0 },
+      vehicleCatalog[0],
+      0.16,
+    );
+    const roof = updateVehicleState(
+      {
+        ...initialVehicleState,
+        roll: 2.55,
+        rollState: 'roof',
+        rolloverRisk: 1,
+        overturned: true,
+      },
+      { throttle: 0, brake: 0, steering: 0 },
+      vehicleCatalog[0],
+      0.16,
+    );
+
+    expect(side.rollState).toBe('side');
+    expect(side.overturned).toBe(false);
+    expect(roof.rollState).toBe('roof');
+    expect(roof.overturned).toBe(true);
   });
 
   it('recovers an overturned vehicle onto its wheels', () => {
@@ -282,6 +359,7 @@ describe('updateVehicleState', () => {
         velocityZ: -4,
         speed: 12,
         roll: 2.55,
+        rollState: 'roof',
         rolloverRisk: 1,
         overturned: true,
         recoveryCooldown: 0,
@@ -300,23 +378,45 @@ describe('updateVehicleState', () => {
     expect(next.recoveryPenalty).toBe(3);
   });
 
-  it('lets normal drive input recover an overturned vehicle', () => {
+  it('lets throttle and counter-steer recover a vehicle from its side without a time penalty', () => {
     const next = updateVehicleState(
       {
         ...initialVehicleState,
-        roll: 2.55,
+        roll: 1.42,
+        rollState: 'side',
         rolloverRisk: 1,
-        overturned: true,
+        overturned: false,
         recoveryCooldown: 0,
       },
-      { throttle: 1, brake: 0, steering: 0 },
+      { throttle: 1, brake: 0, steering: -1 },
       vehicleCatalog[0],
       0.16,
     );
 
     expect(next.overturned).toBe(false);
+    expect(next.rollState).toBe('upright');
     expect(next.speed).toBe(0);
-    expect(next.recoveryPenalty).toBe(3);
+    expect(next.recoveryPenalty).toBe(0);
+  });
+
+  it('requires explicit recovery input when resting on the roof', () => {
+    const next = updateVehicleState(
+      {
+        ...initialVehicleState,
+        roll: 2.55,
+        rollState: 'roof',
+        rolloverRisk: 1,
+        overturned: true,
+        recoveryCooldown: 0,
+      },
+      { throttle: 1, brake: 0, steering: -1 },
+      vehicleCatalog[0],
+      0.16,
+    );
+
+    expect(next.overturned).toBe(true);
+    expect(next.rollState).toBe('roof');
+    expect(next.recoveryPenalty).toBe(0);
   });
 
   it('preserves damage when recovering an overturned vehicle', () => {
@@ -326,6 +426,7 @@ describe('updateVehicleState', () => {
         damage: 48,
         cosmeticDamage: 48,
         mechanicalDamage: 36,
+        rollState: 'roof',
         overturned: true,
         rolloverRisk: 1,
         recoveryCooldown: 0,
