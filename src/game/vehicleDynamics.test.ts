@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { playableHalfSize, terrainHeight } from './terrain';
 import {
   calculateContactPlaneAttitude,
-  calculateDamageEffects,
   getWheelContactGroundHeight,
   initialVehicleState,
   resetVehicleForGateHunt,
@@ -210,7 +209,7 @@ describe('updateVehicleState', () => {
     expect(next.verticalVelocity).toBeGreaterThan(-5);
   });
 
-  it('does not punish routine landings with damage', () => {
+  it('absorbs routine landings without adding a handling penalty', () => {
     const start = makeVehicleStateAt(-22, 34, 0);
     const next = updateVehicleState(
       {
@@ -228,12 +227,9 @@ describe('updateVehicleState', () => {
     );
 
     expect(next.airborne).toBe(false);
-    expect(next.damage).toBe(0);
-    expect(next.cosmeticDamage).toBe(0);
-    expect(next.mechanicalDamage).toBe(0);
   });
 
-  it('ignores terrain sample jumps without a real vertical impact', () => {
+  it('keeps terrain sample jumps from disrupting vehicle control', () => {
     const start = makeVehicleStateAt(-376, -120, 0);
     const staleLowContacts = start.wheelContacts.map((contact) => ({
       ...contact,
@@ -252,12 +248,11 @@ describe('updateVehicleState', () => {
       0.05,
     );
 
-    expect(next.damage).toBe(0);
-    expect(next.cosmeticDamage).toBe(0);
-    expect(next.mechanicalDamage).toBe(0);
+    expect(next.overturned).toBe(false);
+    expect(Number.isFinite(next.speed)).toBe(true);
   });
 
-  it('adds bounded damage for severe crashes instead of routine rough driving', () => {
+  it('handles severe landings through suspension without persistent penalties', () => {
     const start = makeVehicleStateAt(-22, 34, 0);
     const next = updateVehicleState(
       {
@@ -274,10 +269,8 @@ describe('updateVehicleState', () => {
       0.05,
     );
 
-    expect(next.damage).toBeGreaterThan(0);
-    expect(next.cosmeticDamage).toBeLessThanOrEqual(1.8);
-    expect(next.mechanicalDamage).toBeLessThanOrEqual(0.35);
-    expect(next.mechanicalDamage).toBeLessThan(next.cosmeticDamage);
+    expect(next.airborne).toBe(false);
+    expect(next.verticalVelocity).toBeGreaterThan(-10);
   });
 
   it('reconnects to ground after a small jump cycle', () => {
@@ -315,7 +308,6 @@ describe('updateVehicleState', () => {
     expect(['side', 'roof']).toContain(next.rollState);
     expect(Math.abs(next.roll)).toBeGreaterThan(1);
     expect(next.airborne).toBe(false);
-    expect(next.damage).toBeGreaterThan(0);
   });
 
   it('continues rollover momentum before settling into a final state', () => {
@@ -436,13 +428,10 @@ describe('updateVehicleState', () => {
     expect(next.recoveryPenalty).toBe(0);
   });
 
-  it('preserves damage when recovering an overturned vehicle', () => {
+  it('recovers an overturned vehicle without carrying crash penalties', () => {
     const next = updateVehicleState(
       {
         ...initialVehicleState,
-        damage: 48,
-        cosmeticDamage: 48,
-        mechanicalDamage: 36,
         rollState: 'roof',
         overturned: true,
         rolloverRisk: 1,
@@ -453,27 +442,16 @@ describe('updateVehicleState', () => {
       0.16,
     );
 
-    expect(next.damage).toBe(48);
-    expect(next.cosmeticDamage).toBe(48);
-    expect(next.mechanicalDamage).toBe(36);
+    expect(next.overturned).toBe(false);
+    expect(next.rollState).toBe('upright');
   });
 
-  it('uses damage as a gentle acceleration penalty without steering or grip penalties', () => {
-    expect(calculateDamageEffects(0)).toEqual({
-      accelerationScale: 1,
-    });
-    expect(calculateDamageEffects(8).accelerationScale).toBeGreaterThan(0.95);
-    expect(calculateDamageEffects(60).accelerationScale).toBeLessThan(calculateDamageEffects(30).accelerationScale);
-    expect(calculateDamageEffects(100).accelerationScale).toBeGreaterThanOrEqual(0.55);
-  });
-
-  it('resets Gate Hunt retries to the start line with a clean vehicle', () => {
+  it('resets Gate Hunt retries to the start line', () => {
     const next = resetVehicleForGateHunt();
 
     expect(next.x).toBe(initialVehicleState.x);
     expect(next.z).toBe(initialVehicleState.z);
     expect(next.speed).toBe(0);
-    expect(next.damage).toBe(0);
     expect(next.overturned).toBe(false);
   });
 

@@ -5,6 +5,7 @@ export type SurfaceProfile = {
   readonly color: string;
   readonly gripMultiplier: number;
   readonly drag: number;
+  readonly snowBlend?: number;
 };
 
 export const surfaces: Record<SurfaceType, SurfaceProfile> = {
@@ -16,7 +17,7 @@ export const surfaces: Record<SurfaceType, SurfaceProfile> = {
   },
   mud: {
     type: 'mud',
-    color: '#6f5b42',
+    color: '#60482f',
     gripMultiplier: 0.68,
     drag: 0.42,
   },
@@ -40,24 +41,28 @@ export const surfaces: Record<SurfaceType, SurfaceProfile> = {
   },
 };
 
+/**
+ * Returns the driving surface at a world position, including blended snow-edge
+ * grip and drag before the ridge fully turns to snow.
+ */
 export function getSurfaceForPoint(x: number, z: number): SurfaceProfile {
   const basin = Math.sin(x * 0.04) + Math.cos(z * 0.035);
-  const ridge = Math.sin((x + z) * 0.025);
+  const snowBlend = getSnowRidgeBlend(x, z);
 
   if (basin < -1.2) {
     return surfaces.water;
   }
 
-  if (ridge > 0.75 && z > 10) {
+  if (snowBlend >= 1) {
     return surfaces.snow;
   }
 
-  // Snow transition zone: blend between grass and snow at ridge edges
-  if (ridge > 0.65 && z > 2) {
+  if (snowBlend > 0) {
     return {
-      ...surfaces.snow,
-      gripMultiplier: lerp(surfaces.grass.gripMultiplier, surfaces.snow.gripMultiplier, (ridge - 0.65) / 0.1),
-      drag: lerp(surfaces.grass.drag, surfaces.snow.drag, (ridge - 0.65) / 0.1),
+      ...surfaces.grass,
+      gripMultiplier: lerp(surfaces.grass.gripMultiplier, surfaces.snow.gripMultiplier, snowBlend),
+      drag: lerp(surfaces.grass.drag, surfaces.snow.drag, snowBlend),
+      snowBlend,
     };
   }
 
@@ -65,13 +70,26 @@ export function getSurfaceForPoint(x: number, z: number): SurfaceProfile {
     return surfaces.mud;
   }
 
-  if (ridge < -0.7) {
+  if (Math.sin((x + z) * 0.025) < -0.7) {
     return surfaces.rock;
   }
 
   return surfaces.grass;
 }
 
+export function getSnowRidgeBlend(x: number, z: number) {
+  if (z <= 2) {
+    return 0;
+  }
+
+  const ridge = Math.sin((x + z) * 0.025);
+  return clamp((ridge - 0.65) / 0.1, 0, 1);
+}
+
 function lerp(start: number, end: number, amount: number) {
   return start + (end - start) * amount;
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
 }

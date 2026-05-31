@@ -13,7 +13,7 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 - [x] Four-wheel contact ground-height sampling with tire-profile footprint (`getWheelContactGroundHeight`)
 - [x] Contact-plane attitude calculation driving pitch/roll (`calculateContactPlaneAttitude`, `fitContactPlane`)
 - [x] Body height clamped between lowest-allowed and highest-allowed bounds
-- [x] Suspension travel tracked per-frame and used for damage estimation
+- [x] Suspension travel tracked per-frame for landing and rollover response
 - [x] **Tune suspension on diagonal/cross-axle terrain** — cross-axle damping adds extra control when opposite diagonal wheel pairs are crossed-up
 - [x] **Add anti-roll bar simulation** — reduces excessive body lean on side slopes without affecting single-wheel bump compliance
 
@@ -36,7 +36,7 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 - [x] Drive force with hill-torque compensation (`hillTorque` based on speed ratio)
 - [x] Lateral grip proportional to vehicle grip stat and surface grip multiplier
 - [x] Braking force at 20 units (no brake on reverse intent)
-- [x] Drag from surface + damage penalty
+- [x] Drag from surface and handbrake
 - [x] Gradient force (gravity on slopes, 13 units)
 - [ ] **Hill-climb tuning pass** — current `climbs a repeatable grass test hill` test passes but real hills may feel weak; test on max-terrain-gradient locations (ridge areas) and adjust `hillTorque` multiplier
 - [x] **Handbrake / slide mechanic** — spacebar locks rear grip for tighter slides (`handbrake` input, physics constants)
@@ -70,20 +70,20 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 - [x] Surface-type-specific shading patterns (`getSurfaceShade`)
 - [x] `flatShading: true` for chunky retro look
 - [x] `DoubleSide` rendering — no backface culling issues
-- [ ] **Eliminate visible cell-grid seams** — the 3.2-unit cell size creates visible edges at certain distances; consider overlapping cell edges or adding a second octave of noise at a different scale
+- [x] **Eliminate visible cell-grid seams** — terrain shade now uses smoothed multi-scale cell noise instead of hard per-cell color jumps
 - [x] **Water surface flatness** — water areas currently follow the same terrain height function; consider making water cells perfectly flat or adding a subtle wave shader for the "water cut" feel mentioned in the Gate Hunt description
 
 ### Surface Distinction
 - [x] Five surface types with distinct colors and shading
 - [x] Terrain color-distance test verifies surfaces are visually distinct (>0.16 color distance)
-- [ ] **Mud vs grass readability at distance** — mud is darker brown, grass is olive green; verify from chase camera that these remain distinguishable at 50-100m
-- [ ] **Snow-ridge edge blending** — snow currently appears where `ridge > 0.75 && z > 10`; add a transition zone (0.65-0.75) with lerp blending instead of sharp cutoff
+- [x] **Mud vs grass readability at distance** — mud base color was darkened and remains separated from grass in terrain color-distance coverage
+- [x] **Snow-ridge edge blending** — snow ridge edges now expose a 0.65-0.75 blend zone for grip/drag and rendered color
 
 ### Camera Validation
 - [x] Three camera views: chase, slope, close-up
 - [x] Camera target is always above body height (not ground plane)
-- [ ] **Terrain LOD or distance fog tuning** — fog starts at 110 and ends at 310; verify that terrain is still readable from the slope camera at typical chase distances
-- [ ] **Shadow map coverage** — sun shadow camera is 300x300; verify shadows don't cut off visibly at any camera angle near terrain edges
+- [x] **Terrain LOD or distance fog tuning** — fog now starts at 360 and ends at 1500, preserving long-range slope camera readability
+- [x] **Shadow map coverage** — sun shadow camera now covers -940..940 in both axes with a 2048 map
 
 ---
 
@@ -96,7 +96,7 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 - [x] Rear wing and tail details
 - [x] **Narrow the body profile** — hull sections tightened to a narrower race-machine silhouette
 - [x] **Slope the hood more aggressively** — hood nose lowered and narrowed for a sharper front profile
-- [ ] **Raise and compact the cabin** — cabin roof is at y=1.28; consider raising slightly (1.4) and shortening the cabin length to emphasize the off-road machine silhouette
+- [x] **Raise and compact the cabin** — cabin roof is raised to y=1.4 with a tighter top profile
 - [x] **Add visible suspension arms** — simple low-poly A-arms or trailing arms connecting chassis to wheel hubs; needs a less fragmentary treatment
 
 ### Wheel & Tire Details
@@ -108,18 +108,18 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 - [x] Camber simulation from compression
 - [x] **Add tire tread texture** — dedicated tire material with visible tread blocks
 - [x] **Make hub geometry more detailed** — current hub is a simple cylinder; add spokes or a star pattern for recognizable wheel-hub identity
-- [ ] **Tire sidewall height** — tires are purely cylindrical; add a slight sidewall bulge or profile variation
+- [x] **Tire sidewall height** — wheel sides now include shoulder geometry for a subtle tire profile instead of a plain cylinder
 
 ### Decals & Number Panels
 - [x] Number panels on both sides (number "13")
 - [x] Panel texture with pixel-art base/dark/light colors
 - [x] **Add race number to hood or roof** — current numbers are only on side panels; put the number on the hood for top-down readability
-- [ ] **Sponsor/decal stripe geometry** — add a simple colored stripe or band across the body sides using a polygon strip rather than floating geometry
-- [ ] **Make number panel conform to body curvature** — current panels are flat quads at fixed lateral offset; they should bend slightly to follow the hull's taper
+- [x] **Sponsor/decal stripe geometry** — body sides now use polygon stripe strips that follow the tapered hull
+- [x] **Make number panel conform to body curvature** — side number panels are split into angled front/rear quads to follow the hull taper
 
 ### Visual Cleanup
 - [ ] **Audit for floating/accidental geometry** — review all child meshes of the vehicle rig; remove any that read as construction artifacts
-- [ ] **Ensure consistent material roughness** — body (0.84), accent (0.72), cage (0.9), glass (0.68), trim (0.92); decide on a cohesive range and keep materials within it
+- [x] **Ensure consistent material roughness** — body, accent, cage, glass, and trim now sit in a tighter 0.78-0.9 range
 - [ ] **Wheel-well clearance check** — verify wheels don't clip through fenders at maximum compression + steering angle
 
 ---
@@ -168,41 +168,26 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 - [x] **Add mini route map** — HUD shows gate positions, active gate, route line, vehicle position, and heading-to-gate line
 - [x] **Show next gate preview** — HUD callout shows the next gate after the current active target
 - [x] **Compact HUD cleanup** — remove unimplemented catalog, garage, and network affordances from the live overlay
-- [ ] **Detailed split review UI** — move split times into a compact post-run or expandable panel instead of always reserving HUD space
+- [x] **Detailed split review UI** — split times now live in a compact expandable post-run review
 - [ ] **Mode selection UI** — reintroduce a mode picker only after additional modes have playable logic and clear selected-mode behavior
 - [ ] **Garage selection UI** — add vehicle selection, switching, and selected-vehicle feedback before showing garage stats in the HUD again
 
 ---
 
-## Phase 5: Damage, Flips, and Recovery
-
-### Damage System
-- [x] `estimateImpactDamage` from slope hits and suspension bottom-outs
-- [x] Damage affects vehicle drag (`state.damage * 0.012` added to drag)
-- [x] Damage clamped to 0-100 range
-- [x] **Differentiate damage types** — separate cosmetic damage from mechanical damage; mechanical damage only applies mild acceleration/drag penalties
-- [x] **Damage thresholds** — replaced hard handling thresholds with a gentle continuous acceleration penalty and explicit HUD severity bands
-- [x] **HUD damage indicator** — show current damage as a bar or percentage in the HUD
-
-### Visual Damage
-- [x] **Panel deformation states** — create 2-3 levels of dented geometry variants for hood, doors, and roof that swap in based on damage level
-- [x] **Bumper detachment** — at high damage, bumpers visibly sag and swap to detached/hanging damage geometry
-- [x] **Broken glass** — crack overlay appears on cabin glass at moderate cosmetic damage
-- [x] **Wheel damage visuals** — high cosmetic damage adds wheel wobble and bent-wheel squash
-- [x] **Smoke/steam particles** — engine smoke particles appear and intensify with mechanical damage
+## Phase 5: Flips and Recovery
 
 ### Flip & Roll Logic
 - [x] Rollover risk accumulation → overturn state
 - [x] Overturned vehicles cannot drive
 - [x] Recovery input (R key)
 - [x] **Fix vertical wall climbing** — steep contact now blocks climb attempts and deflects velocity along the wall face
-- [x] **Make rollovers achievable** — rollover thresholds feed a momentum-based flip state with rollover damage
+- [x] **Make rollovers achievable** — rollover thresholds feed a momentum-based flip state
 - [x] **Partial roll states** — distinguish between "on side" (can self-right with throttle + steering), "on roof" (needs recovery), and "end-over-end" (full flip)
 - [x] **Roll momentum continuation** — rollover state keeps angular momentum through a flip before settling on wheels, side, or roof
 
 ### Recovery
 - [x] `recoverVehicle` resets position above ground with zero velocity
-- [x] Recovery preserves damage state
+- [x] Recovery restores vehicle control without persistent crash penalties
 - [x] **Recovery cooldown** — 2-second cooldown after recovery prevents spam
 - [x] **Recovery penalty** — +3 seconds added to Gate Hunt clock on recovery
 - [x] **Recovery animation** — brief camera shake or transition instead of instant teleport
@@ -213,7 +198,7 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 
 ### State Serialization
 - [x] `ControlInput` type — throttle, brake, steering, recover
-- [x] `VehicleState` type — position, velocity, orientation, contacts, damage, airborne
+- [x] `VehicleState` type — position, velocity, orientation, contacts, rollover, airborne
 - [x] `GateHuntProgress` type — gate index, timing, runs completed
 - [x] `GameMode` type — mode ID, label, summary, player count
 - [ ] **Add network-serializable snapshot format** — define a compact binary or JSON schema for all three state types suitable for 20Hz network sync
@@ -235,7 +220,7 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 - [ ] **Network status UI** — add online-room/status controls only after networking architecture and room flow are implemented
 
 ### Pre-Multiplayer Gate
-- [ ] **Single-player polish complete** — Gate Hunt loop, damage visuals, recovery all finalized (Phases 1-5 done)
+- [ ] **Single-player polish complete** — Gate Hunt loop, vehicle visuals, recovery all finalized (Phases 1-5 done)
 - [ ] **Evaluate networking library** — research WebRTC vs WebSocket with authoritative server for room-based multiplayer
 - [ ] **Prototype 2-player local split-screen** — validates state separation before adding network layer
 
@@ -253,7 +238,7 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 ### Code Organization
 - [x] **Extract physics constants to a config module** — physics tuning values live in `physics.ts`
 - [ ] **Split `VehicleModel.ts`** — it's ~400 lines mixing body geometry, wheel animation, and material creation; separate into `VehicleBody.ts`, `VehicleWheels.ts`, `VehicleMaterials.ts`
-- [ ] **Add JSDoc to public APIs** — `updateVehicleState`, `updateGateHuntProgress`, `getGameplayCameraPose`, `getSurfaceForPoint`
+- [x] **Add JSDoc to public APIs** — `updateVehicleState`, `updateGateHuntProgress`, `getGameplayCameraPose`, `getSurfaceForPoint`
 
 ### Accessibility
 - [x] **Keyboard remapping** — extract key bindings to a config constant so players can customize controls
@@ -267,23 +252,20 @@ Legend: `[x]` done, `[ ]` not started, `[~]` partially done / needs refinement.
 | Phase | Done | Partial | Remaining | Total |
 |-------|------|---------|-----------|-------|
 | Phase 1: Physics | 40 | 0 | 1 | 41 |
-| Phase 2: Terrain | 11 | 0 | 5 | 16 |
-| Phase 3: Vehicle Art | 18 | 0 | 7 | 25 |
-| Phase 4: Gate Hunt | 33 | 0 | 3 | 36 |
-| Phase 5: Damage/Flips | 14 | 1 | 6 | 21 |
+| Phase 2: Terrain | 16 | 0 | 0 | 16 |
+| Phase 3: Vehicle Art | 23 | 0 | 2 | 25 |
+| Phase 4: Gate Hunt | 34 | 0 | 2 | 36 |
+| Phase 5: Flips/Recovery | 13 | 0 | 0 | 13 |
 | Phase 6: Multiplayer | 6 | 0 | 14 | 20 |
-| Cross-cutting | 7 | 0 | 4 | 11 |
-| **Total** | **129** | **1** | **40** | **170** |
+| Cross-cutting | 8 | 0 | 3 | 11 |
+| **Total** | **140** | **0** | **22** | **162** |
 
-**Overall completion: ~76%** of the full-scope tasklist is done.
+**Overall completion: ~86%** of the full-scope tasklist is done.
 
 ### Recommended Priority Order
 
-1. **Phase 1 remaining** — physics tuning is foundational; everything else depends on good driving feel
-2. **Phase 3 body narrowing + hood slope** — quick geometry changes with high visual impact
-3. **Phase 4 gate feedback polish** — Gate Hunt is the flagship mode; make it shine
-4. **Phase 5 damage visuals** — adds game-feel payoff for crashes that already exist in the physics
-5. **Phase 2 terrain edge blending** — smooth out the few remaining visual artifacts
-6. **Phase 5 recovery polish** — cooldown, penalty, animation
-7. **Cross-cutting cleanup** — extract constants, add CI
-8. **Phase 6 pre-multiplayer prep** — only after everything above is stable
+1. **Phase 1 hill-climb tuning** — physics tuning is foundational; validate against ridge routes before network prep
+2. **Phase 3 vehicle validation** — geometry audit and wheel-well clearance are the last vehicle-art risks
+3. **Phase 4 mode/garage UI** — only reintroduce these controls once mode and vehicle switching behavior exists
+4. **Cross-cutting polish** — performance budget, `VehicleModel.ts` split, and colorblind terrain mode
+5. **Phase 6 pre-multiplayer prep** — only after everything above is stable

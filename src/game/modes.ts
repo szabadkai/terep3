@@ -21,7 +21,7 @@ export const modeCatalog: readonly GameMode[] = [
   {
     id: 'free-roam',
     label: 'Free Roam',
-    summary: 'Open terrain, vehicle switching, damage testing, and hidden lines.',
+    summary: 'Open terrain, vehicle switching, recovery practice, and hidden lines.',
     icon: MapPinned,
     players: '1-8',
   },
@@ -67,7 +67,7 @@ export const featuredMode = modeCatalog.find((mode) => mode.id === 'gate-hunt') 
 export const scoringSignals = [
   { label: 'Terrain gates', value: '18' },
   { label: 'Surface types', value: '5' },
-  { label: 'Damage zones', value: '7' },
+  { label: 'Recovery gates', value: '7' },
   { label: 'Target FPS', value: '60' },
   { label: 'Online rooms', value: 'Planned' },
   { label: 'Split screen', value: 'Planned' },

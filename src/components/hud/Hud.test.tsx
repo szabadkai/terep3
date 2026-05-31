@@ -29,8 +29,9 @@ describe('Hud', () => {
           completedRuns: 1,
           lastRunSeconds: 72.4,
           bestTimeImproved: true,
+          splitTimes: [12.1, 14.2, 10.4, 9.8, 8.2, 7.3, 4.6, 3.4, 2.4],
         }}
-        vehicleState={{ ...initialVehicleState, damage: 42, mechanicalDamage: 35 }}
+        vehicleState={initialVehicleState}
         onRetryGateHunt={onRetry}
       />,
     );
@@ -39,7 +40,7 @@ describe('Hud', () => {
     expect(screen.getByRole('img', { name: 'Vehicle route to gate C' })).toBeInTheDocument();
     expect(screen.getByText('Best run')).toBeInTheDocument();
     expect(screen.getByText('1:12.4')).toBeInTheDocument();
-    expect(screen.getByLabelText('Vehicle damage 42%')).toBeInTheDocument();
+    expect(screen.getByLabelText('Last run split times')).toBeInTheDocument();
     expect(screen.getByText(/Next D/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Retry Gate Hunt' }));

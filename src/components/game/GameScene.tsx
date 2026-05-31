@@ -48,9 +48,9 @@ export function GameScene({ onGateHuntProgress, onVehicleState, gateHuntRetrySig
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#9db6c6');
-    scene.fog = new THREE.Fog('#9db6c6', 240, 900);
+    scene.fog = new THREE.Fog('#9db6c6', 360, 1500);
 
-    const camera = new THREE.PerspectiveCamera(54, mount.clientWidth / mount.clientHeight, 0.1, 1100);
+    const camera = new THREE.PerspectiveCamera(54, mount.clientWidth / mount.clientHeight, 0.1, 1800);
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(mount.clientWidth, mount.clientHeight);
@@ -448,10 +448,10 @@ function createLighting() {
   sun.position.set(-40, 80, 34);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
-  sun.shadow.camera.left = -520;
-  sun.shadow.camera.right = 520;
-  sun.shadow.camera.top = 520;
-  sun.shadow.camera.bottom = -520;
+  sun.shadow.camera.left = -940;
+  sun.shadow.camera.right = 940;
+  sun.shadow.camera.top = 940;
+  sun.shadow.camera.bottom = -940;
   lighting.add(hemisphere, sun);
   return lighting;
 }

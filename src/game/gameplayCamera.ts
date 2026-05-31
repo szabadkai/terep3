@@ -8,6 +8,13 @@ export type GameplayCameraPose = {
   readonly smoothing: number;
 };
 
+/**
+ * Computes the gameplay camera rig for each selectable view.
+ *
+ * The returned target is deliberately based on vehicle body height, not raw
+ * terrain height, so chase and slope cameras keep the car centred during jumps,
+ * recoveries, and steep climbs.
+ */
 export function getGameplayCameraPose(vehicle: VehicleState, view: GameplayCameraView): GameplayCameraPose {
   const targetHeight = vehicle.bodyHeight + (view === 'close' ? 1.35 : 2.2);
   const target: readonly [number, number, number] = [vehicle.x, targetHeight, vehicle.z];

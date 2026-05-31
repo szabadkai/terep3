@@ -34,13 +34,11 @@ The project direction is simulation-first: the driving feel, wheel contact, susp
 - Turn Gate Hunt into a fully playable loop with active checkpoint direction, gate detection, run timing, best time, and reset/retry behavior.
 - Make active gates clear in-world without overwhelming the retro visual style.
 - Add simple completion feedback and route progression.
-- Keep the live HUD focused on implemented Gate Hunt telemetry: active gate, timing, route, damage, retry, and controls.
+- Keep the live HUD focused on implemented Gate Hunt telemetry: active gate, timing, route, retry, and controls.
 - Keep the mode playable in single-player before adding competing vehicles or network play.
 
-## Phase 5: Damage, Flips, and Recovery
+## Phase 5: Flips and Recovery
 
-- Add crash response that affects handling without making the vehicle unusable too quickly.
-- Add visible low-poly deformation or damage states for panels, wheels, and bumpers.
 - Implement flip, roll, and landing logic so crashes are part of the game feel.
 - Add recovery behavior that is fair but not intrusive.
 

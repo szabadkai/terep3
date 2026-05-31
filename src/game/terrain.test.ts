@@ -30,12 +30,13 @@ describe('terrain visuals', () => {
     });
   });
 
-  it('changes color at tile-cell boundaries instead of blurring continuous UV bands', () => {
+  it('keeps local terrain noise sharp without hard cell-edge seams', () => {
     const sameCell = colorDistance(getTerrainPixelColor(12.1, 90.1), getTerrainPixelColor(12.4, 90.3));
     const nextCell = colorDistance(getTerrainPixelColor(12.1, 90.1), getTerrainPixelColor(15.4, 90.1));
 
-    expect(sameCell).toBe(0);
-    expect(nextCell).toBeGreaterThan(0.08);
+    expect(sameCell).toBeGreaterThan(0);
+    expect(sameCell).toBeLessThan(0.015);
+    expect(nextCell).toBeGreaterThan(sameCell * 5);
   });
 
   it('keeps water cuts much flatter than surrounding terrain', () => {

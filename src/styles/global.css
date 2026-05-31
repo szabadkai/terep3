@@ -178,7 +178,7 @@ a {
 }
 
 .gate-focus,
-.run-feedback {
+.run-review {
   display: flex;
   align-items: center;
   min-height: 38px;
@@ -218,27 +218,58 @@ a {
 }
 
 .gate-focus h2,
-.run-feedback strong {
+.run-review strong {
   font-size: 0.82rem;
   line-height: 1.1;
 }
 
 .gate-focus div span,
-.run-feedback span {
+.run-review span {
   color: rgb(246 241 228 / 68%);
   font-size: 0.72rem;
   font-weight: 800;
   text-transform: uppercase;
 }
 
-.run-feedback {
-  justify-content: space-between;
-  padding: 8px 10px;
+.run-review {
+  display: block;
+  overflow: hidden;
 }
 
-.run-feedback[data-improved="true"] {
+.run-review summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.run-review summary::-webkit-details-marker {
+  display: none;
+}
+
+.run-review[data-improved="true"] {
   border-color: rgb(255 223 69 / 44%);
   background: rgb(255 223 69 / 14%);
+}
+
+.split-list {
+  display: grid;
+  max-height: 142px;
+  gap: 2px;
+  margin: 0;
+  padding: 0 10px 8px;
+  overflow: auto;
+  list-style: none;
+}
+
+.split-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.68rem;
+  line-height: 1.2;
 }
 
 .hud-row {
@@ -254,7 +285,7 @@ a {
   gap: 8px;
 }
 
-.hud-row__stack .run-feedback {
+.hud-row__stack .run-review {
   min-height: 0;
 }
 
@@ -317,59 +348,6 @@ a {
   stroke: #172026;
   stroke-linejoin: round;
   stroke-width: 1.2;
-}
-
-.damage-meter {
-  display: grid;
-  gap: 7px;
-  border: 1px solid rgb(255 255 255 / 12%);
-  border-radius: 6px;
-  padding: 8px;
-  background: rgb(255 255 255 / 7%);
-}
-
-.damage-meter__label {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  font-size: 0.76rem;
-  font-weight: 800;
-  text-transform: uppercase;
-}
-
-.damage-meter__label span {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: rgb(246 241 228 / 72%);
-}
-
-.damage-meter__track {
-  height: 8px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: rgb(0 0 0 / 28%);
-}
-
-.damage-meter__fill {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: #5fae8f;
-  transition: width 160ms ease, background 160ms ease;
-}
-
-.damage-meter[data-severity="minor"] .damage-meter__fill {
-  background: #e7c66d;
-}
-
-.damage-meter[data-severity="major"] .damage-meter__fill {
-  background: #da6c54;
-}
-
-.damage-meter[data-severity="critical"] .damage-meter__fill {
-  background: #ff4b3e;
 }
 
 .hud__footer {

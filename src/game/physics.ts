@@ -155,31 +155,6 @@ export const physics = {
   flipPitchVelocityScale: 5,
   flipPitchVelocityMax: 2.4,
 
-  /** Damage: drag penalty per damage point */
-  damageDragPerPoint: 0.006,
-  /** Damage: minimum horizontal speed for terrain impact damage */
-  damageMinSpeed: 32,
-  /** Damage: speed range where terrain impacts ramp from minor to full force */
-  damageSpeedRamp: 42,
-  /** Damage: slope hit threshold (height difference) */
-  damageSlopeHitThreshold: 5.8,
-  /** Damage: bottom-out threshold */
-  damageBottomOutThreshold: 0.84,
-  /** Damage: minimum upward suspension impulse before grounded terrain hits count */
-  damageVerticalImpulseThreshold: 10,
-  /** Damage: hard landing threshold from downward velocity */
-  damageLandingThreshold: 15,
-  /** Damage: slope hit multiplier */
-  damageSlopeMultiplier: 0.0024,
-  /** Damage: bottom-out multiplier */
-  damageBottomOutMultiplier: 0.004,
-  /** Damage: hard landing multiplier */
-  damageLandingMultiplier: 0.0032,
-  /** Damage: maximum cosmetic damage from one impact frame */
-  damageCosmeticImpactCap: 1.8,
-  /** Damage: maximum mechanical damage from one impact frame */
-  damageMechanicalImpactCap: 0.35,
-
   /** Wheel contact sampling */
   wheelContactForwardSamples: [-0.92, -0.7, -0.46, -0.23, 0, 0.23, 0.46, 0.7, 0.92] as readonly number[],
   wheelContactSideSamples: [-1, -0.5, 0, 0.5, 1] as readonly number[],

@@ -27,18 +27,18 @@ export type GateHuntProgress = {
 };
 
 export const gateTargets: readonly GateTarget[] = [
-  { id: 'A', x: -285, z: -230 },
-  { id: 'B', x: -75, z: -315 },
-  { id: 'C', x: 160, z: -260 },
-  { id: 'D', x: 315, z: -70 },
-  { id: 'E', x: 245, z: 190 },
-  { id: 'F', x: 20, z: 315 },
-  { id: 'G', x: -230, z: 250 },
-  { id: 'H', x: -355, z: -15 },
-  { id: 'I', x: -330, z: -190 },
+  { id: 'A', x: -428, z: -345 },
+  { id: 'B', x: -112, z: -472 },
+  { id: 'C', x: 240, z: -390 },
+  { id: 'D', x: 472, z: -105 },
+  { id: 'E', x: 368, z: 285 },
+  { id: 'F', x: 30, z: 472 },
+  { id: 'G', x: -345, z: 375 },
+  { id: 'H', x: -532, z: -22 },
+  { id: 'I', x: -495, z: -285 },
 ] as const;
 
-export const targetCircuitSeconds = 120;
+export const targetCircuitSeconds = 180;
 
 export function getGateCircuitLength() {
   return gateTargets.reduce((length, gate, index) => {
@@ -60,6 +60,14 @@ export const initialGateHuntProgress: GateHuntProgress = {
   runSplits: [],
 };
 
+/**
+ * Advances Gate Hunt timing and gate progression for the current vehicle pose.
+ *
+ * The function records cumulative run splits as gates are cleared, converts
+ * them to per-gate split times when a run completes, and applies a short gate
+ * cooldown to prevent duplicate triggers while the vehicle remains inside the
+ * checkpoint radius.
+ */
 export function updateGateHuntProgress(
   progress: GateHuntProgress,
   vehicle: VehicleState,

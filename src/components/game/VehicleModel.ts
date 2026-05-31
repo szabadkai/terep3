@@ -11,7 +11,6 @@ export type VehicleRig = THREE.Group & {
     wheelOffsets?: THREE.Vector3[];
     suspensionArms?: THREE.Mesh[];
     bumpers?: THREE.Group;
-    damageDetails?: THREE.Group;
     wheelRadius?: number;
     wheelSpin?: number[];
   };
@@ -35,7 +34,6 @@ export function createVehicleMesh(): VehicleRig {
   const wheels: THREE.Group[] = [];
   const wheelOffsets: THREE.Vector3[] = [];
   const suspensionArms: THREE.Mesh[] = [];
-  const damageDetails = createDamageDetails(materials.trim, materials.glass);
   const bumpers = createBumpers(materials.cage);
 
   chassis.add(createMainHull(materials.body));
@@ -43,8 +41,8 @@ export function createVehicleMesh(): VehicleRig {
   chassis.add(createHoodNumberPanel());
   chassis.add(createRearPanel(materials.accent));
   chassis.add(createCabin(materials.glass));
-  chassis.add(damageDetails);
   chassis.add(createSkidPlate(materials.trim));
+  chassis.add(createSponsorStripes(materials.accent));
   chassis.add(createNumberPanel(-1));
   chassis.add(createNumberPanel(1));
   chassis.add(bumpers);
@@ -75,7 +73,6 @@ export function createVehicleMesh(): VehicleRig {
   vehicle.userData.wheelOffsets = wheelOffsets;
   vehicle.userData.suspensionArms = suspensionArms;
   vehicle.userData.bumpers = bumpers;
-  vehicle.userData.damageDetails = damageDetails;
   vehicle.userData.wheelRadius = wheelRadius;
   vehicle.userData.wheelSpin = wheels.map(() => 0);
 
@@ -89,7 +86,7 @@ export function animateVehicleRig(
   frameTime: number,
   deltaSeconds: number,
 ) {
-  const { chassis, wheels, wheelOffsets, suspensionArms, bumpers, damageDetails } = vehicle.userData;
+  const { chassis, wheels, wheelOffsets, suspensionArms } = vehicle.userData;
   const rigWheelRadius = vehicle.userData.wheelRadius;
   const wheelSpin = vehicle.userData.wheelSpin;
 
@@ -113,8 +110,6 @@ export function animateVehicleRig(
 
   chassis.position.y = visualBodyHeight;
   chassis.rotation.set(visualPitch, 0, visualRoll, 'YXZ');
-  updateBumperDamage(bumpers, state.cosmeticDamage);
-  updateDamageDetails(damageDetails, state.cosmeticDamage, state.mechanicalDamage, frameTime);
 
   wheels.forEach((wheel, index) => {
     const offset = wheelOffsets[index];
@@ -136,11 +131,9 @@ export function animateVehicleRig(
       : contact.groundHeight + rigWheelRadius + axleHop;
     const wheelHeight = Math.max(targetWheelHeight, minimumWheelHeight);
 
-    const wheelDamageWobble = state.cosmeticDamage > 68 ? Math.sin(frameTime * 0.028 + index * 1.7) * 0.08 : 0;
     wheel.position.set(offset.x, wheelHeight, offset.z);
     wheel.rotation.set(visualPitch * 0.38, steerAngle, visualRoll + camber, 'YXZ');
-    wheel.rotation.x += wheelDamageWobble;
-    updateWheelDamage(wheel, state.cosmeticDamage, frameTime, index);
+    wheel.scale.set(1, 1, 1);
     spinWheelMeshes(wheel, wheelSpin[index]);
   });
 
@@ -160,21 +153,21 @@ function createVehicleMaterials() {
       color: '#ffffff',
       map: createCarTexture('#f01816', '#7e0b0a', '#ff7064'),
       flatShading: true,
-      roughness: 0.72,
+      roughness: 0.8,
       side: THREE.DoubleSide,
     }),
     cage: new THREE.MeshStandardMaterial({
       color: '#ffffff',
       map: createCarTexture('#11171b', '#030405', '#30383e'),
       flatShading: true,
-      roughness: 0.9,
+      roughness: 0.88,
       side: THREE.DoubleSide,
     }),
     glass: new THREE.MeshStandardMaterial({
       color: '#ffffff',
       map: createCarTexture('#78a6bd', '#29495a', '#b7dcec'),
       flatShading: true,
-      roughness: 0.68,
+      roughness: 0.78,
       metalness: 0.04,
       side: THREE.DoubleSide,
     }),
@@ -194,7 +187,7 @@ function createVehicleMaterials() {
       color: '#ffffff',
       map: createCarTexture('#20272b', '#060809', '#4f5a60'),
       flatShading: true,
-      roughness: 0.92,
+      roughness: 0.9,
       side: THREE.DoubleSide,
     }),
   };
@@ -295,18 +288,56 @@ function createSkidPlate(material: THREE.Material) {
 }
 
 function createNumberPanel(side: -1 | 1) {
-  const number = createPolygonMesh(
+  const panel = new THREE.Group();
+  const material = createNumberMaterial();
+  const front = createPolygonMesh(
     [
-      [side * 1.08, 0.19, 0.88],
-      [side * 0.98, 0.28, 0.08],
-      [side * 0.98, -0.28, 0.08],
-      [side * 1.08, -0.34, 0.88],
+      [side * 1.075, 0.18, 0.88],
+      [side * 1.015, 0.25, 0.44],
+      [side * 1.015, -0.27, 0.44],
+      [side * 1.075, -0.33, 0.88],
     ],
     [[0, 1, 2, 3]],
-    createNumberMaterial(),
+    material,
   );
-  number.renderOrder = 2;
-  return number;
+  const rear = createPolygonMesh(
+    [
+      [side * 1.015, 0.25, 0.44],
+      [side * 0.975, 0.28, 0.02],
+      [side * 0.975, -0.27, 0.02],
+      [side * 1.015, -0.27, 0.44],
+    ],
+    [[0, 1, 2, 3]],
+    material,
+  );
+
+  front.renderOrder = 2;
+  rear.renderOrder = 2;
+  panel.add(front, rear);
+  return panel;
+}
+
+function createSponsorStripes(material: THREE.Material) {
+  const stripes = new THREE.Group();
+
+  [-1, 1].forEach((side) => {
+    const stripe = createPolygonMesh(
+      [
+        [side * 1.02, -0.02, 1.06],
+        [side * 0.97, 0.04, 0.2],
+        [side * 0.86, -0.02, -1.68],
+        [side * 0.89, -0.16, -1.72],
+        [side * 0.99, -0.1, 0.16],
+        [side * 1.07, -0.16, 1.02],
+      ],
+      [[0, 1, 4, 5], [1, 2, 3, 4]],
+      material,
+    );
+    stripe.renderOrder = 1;
+    stripes.add(stripe);
+  });
+
+  return stripes;
 }
 
 function createHoodNumberPanel() {
@@ -328,167 +359,16 @@ function createBumpers(material: THREE.Material) {
   const bumpers = new THREE.Group();
 
   [
-    [0, -0.38, 2.8, 2.42, 80, 'front'],
-    [0, -0.42, -2.58, 2.06, 68, 'rear'],
-  ].forEach(([x, y, z, width, damageLevel, id]) => {
+    [0, -0.38, 2.8, 2.42],
+    [0, -0.42, -2.58, 2.06],
+  ].forEach(([x, y, z, width]) => {
     const bumper = new THREE.Mesh(new THREE.BoxGeometry(Number(width), 0.18, 0.2), material);
     bumper.position.set(Number(x), Number(y), Number(z));
     bumper.castShadow = true;
-    bumper.userData.damageLevel = Number(damageLevel);
-    bumper.userData.originalY = Number(y);
-    bumper.userData.id = id;
     bumpers.add(bumper);
   });
 
   return bumpers;
-}
-
-function createDamageDetails(trimMaterial: THREE.Material, glassMaterial: THREE.Material) {
-  const details = new THREE.Group();
-  const dentMaterial = trimMaterial.clone();
-  const crackMaterial = glassMaterial.clone();
-  const smokeMaterial = new THREE.MeshBasicMaterial({
-    color: '#8d948c',
-    transparent: true,
-    opacity: 0,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-  });
-
-  if (dentMaterial instanceof THREE.MeshStandardMaterial) {
-    dentMaterial.color.set('#15191a');
-    dentMaterial.transparent = true;
-    dentMaterial.opacity = 0.82;
-  }
-
-  if (crackMaterial instanceof THREE.MeshStandardMaterial) {
-    crackMaterial.color.set('#effaff');
-    crackMaterial.emissive.set('#bedee9');
-    crackMaterial.emissiveIntensity = 0.14;
-    crackMaterial.transparent = true;
-    crackMaterial.opacity = 0.86;
-  }
-
-  const lightDent = new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.035, 0.42), dentMaterial);
-  lightDent.position.set(-0.24, 0.12, 1.92);
-  lightDent.rotation.set(-0.28, 0.12, -0.08);
-  lightDent.userData.damageLevel = 22;
-
-  const deepDent = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.05, 0.34), dentMaterial);
-  deepDent.position.set(0.18, 0.22, 1.22);
-  deepDent.rotation.set(-0.42, -0.08, 0.16);
-  deepDent.userData.damageLevel = 48;
-
-  const roofDent = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.04, 0.5), dentMaterial);
-  roofDent.position.set(0.08, 1.23, -0.3);
-  roofDent.rotation.set(-0.08, 0.1, -0.2);
-  roofDent.userData.damageLevel = 72;
-
-  const crackGroup = new THREE.Group();
-  crackGroup.position.set(0, 0.9, 0.43);
-  crackGroup.rotation.x = -0.7;
-  crackGroup.userData.damageLevel = 38;
-
-  [
-    [0, 0, 0.46, 0.035, 0.035],
-    [-0.16, 0.07, 0.34, 0.03, 0.62],
-    [0.18, -0.05, 0.28, 0.03, -0.68],
-  ].forEach(([x, y, height, width, rotation]) => {
-    const crack = new THREE.Mesh(new THREE.BoxGeometry(width, 0.022, height), crackMaterial);
-    crack.position.set(x, y, 0);
-    crack.rotation.z = rotation;
-    crackGroup.add(crack);
-  });
-
-  const detachedFrontBumper = new THREE.Mesh(new THREE.BoxGeometry(2.32, 0.16, 0.18), dentMaterial);
-  detachedFrontBumper.position.set(0.08, -0.62, 2.88);
-  detachedFrontBumper.rotation.set(0.32, 0.08, -0.2);
-  detachedFrontBumper.userData.damageLevel = 82;
-
-  const detachedRearBumper = new THREE.Mesh(new THREE.BoxGeometry(1.96, 0.16, 0.18), dentMaterial);
-  detachedRearBumper.position.set(-0.04, -0.72, -2.62);
-  detachedRearBumper.rotation.set(-0.24, -0.1, 0.18);
-  detachedRearBumper.userData.damageLevel = 68;
-
-  const smokeGroup = new THREE.Group();
-  smokeGroup.position.set(0, 0.42, 1.72);
-  smokeGroup.userData.damageLevel = 56;
-  smokeGroup.userData.smoke = true;
-
-  for (let index = 0; index < 7; index += 1) {
-    const puff = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.34), smokeMaterial.clone());
-    puff.userData.offset = index;
-    smokeGroup.add(puff);
-  }
-
-  details.add(lightDent, deepDent, roofDent, crackGroup, detachedFrontBumper, detachedRearBumper, smokeGroup);
-  updateDamageDetails(details, 0, 0, 0);
-  return details;
-}
-
-function updateBumperDamage(bumpers: THREE.Group | undefined, cosmeticDamage: number) {
-  if (!bumpers) {
-    return;
-  }
-
-  bumpers.children.forEach((child) => {
-    const damageLevel = Number(child.userData.damageLevel ?? 100);
-    const amount = clamp((cosmeticDamage - damageLevel) / 22, 0, 1);
-
-    child.visible = amount < 0.95;
-    child.rotation.x = (child.userData.id === 'front' ? 0.42 : -0.35) * amount;
-    child.rotation.z = (child.userData.id === 'front' ? -0.22 : 0.18) * amount;
-    child.position.y = Number(child.userData.originalY ?? child.position.y) - amount * 0.28;
-  });
-}
-
-function updateDamageDetails(
-  details: THREE.Group | undefined,
-  cosmeticDamage: number,
-  mechanicalDamage: number,
-  frameTime: number,
-) {
-  if (!details) {
-    return;
-  }
-
-  details.children.forEach((child) => {
-    const damageLevel = Number(child.userData.damageLevel ?? 0);
-    const visible = Math.max(cosmeticDamage, mechanicalDamage) >= damageLevel;
-    const scale = visible ? clamp((cosmeticDamage - damageLevel) / 35, 0.35, 1.15) : 0.001;
-
-    child.visible = visible;
-
-    if (child.userData.smoke === true) {
-      updateSmokeDamage(child as THREE.Group, mechanicalDamage, frameTime);
-      return;
-    }
-
-    child.scale.setScalar(scale);
-  });
-}
-
-function updateSmokeDamage(smoke: THREE.Group, mechanicalDamage: number, frameTime: number) {
-  const amount = clamp((mechanicalDamage - 45) / 45, 0, 1);
-  smoke.visible = amount > 0;
-  smoke.children.forEach((child, index) => {
-    const phase = frameTime * 0.0018 + index * 0.72;
-    const rise = ((phase + index * 0.19) % 1) * 1.15;
-    child.position.set(Math.sin(phase * 5.1) * 0.18, rise, Math.cos(phase * 3.8) * 0.14);
-    child.rotation.set(0, frameTime * 0.001 + index, 0);
-    child.scale.setScalar(0.45 + rise * 0.55 + amount * 0.35);
-
-    if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshBasicMaterial) {
-      child.material.opacity = amount * (1 - rise / 1.25) * 0.34;
-    }
-  });
-}
-
-function updateWheelDamage(wheel: THREE.Group, cosmeticDamage: number, frameTime: number, index: number) {
-  const amount = clamp((cosmeticDamage - 70) / 30, 0, 1);
-  const squash = Math.sin(frameTime * 0.018 + index * 1.3) * 0.08 * amount;
-
-  wheel.scale.set(1, 1 + squash, 1 - squash * 0.7);
 }
 
 function createFenders(bodyMaterial: THREE.Material) {
@@ -546,6 +426,7 @@ function createWheel(tireMaterial: THREE.Material, hubMaterial: THREE.Material) 
   const tire = new THREE.Mesh(new THREE.CylinderGeometry(wheelRadius, wheelRadius, 0.56, 12), tireMaterial);
   const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.61, 10), hubMaterial);
   const spokeMaterial = hubMaterial.clone();
+  const sidewallMaterial = tireMaterial.clone();
 
   tire.rotation.z = Math.PI / 2;
   hub.rotation.z = Math.PI / 2;
@@ -553,9 +434,21 @@ function createWheel(tireMaterial: THREE.Material, hubMaterial: THREE.Material) 
   hub.castShadow = true;
   spinGroup.add(tire, hub);
 
+  if (sidewallMaterial instanceof THREE.MeshStandardMaterial) {
+    sidewallMaterial.roughness = 1;
+  }
+
   for (let side = -1; side <= 1; side += 2) {
     const face = new THREE.Group();
     face.position.x = side * 0.32;
+    const shoulder = new THREE.Mesh(
+      new THREE.CylinderGeometry(wheelRadius * 0.94, wheelRadius * 1.04, 0.055, 12),
+      sidewallMaterial,
+    );
+
+    shoulder.rotation.z = Math.PI / 2;
+    shoulder.castShadow = true;
+    face.add(shoulder);
 
     for (let index = 0; index < 5; index += 1) {
       const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.12, 0.48), spokeMaterial);

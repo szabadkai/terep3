@@ -45,9 +45,6 @@ export type VehicleState = {
   readonly rollVelocity: number;
   readonly pitchVelocity: number;
   readonly overturned: boolean;
-  readonly damage: number;
-  readonly cosmeticDamage: number;
-  readonly mechanicalDamage: number;
   /** Seconds until recovery input is accepted again */
   readonly recoveryCooldown: number;
   /** Time penalty added to Gate Hunt on recovery */
@@ -69,17 +66,17 @@ export type WheelContact = {
 
 /** Initial vehicle placement near the start area. */
 export const initialVehicleState: VehicleState = {
-  x: -318,
-  z: -260,
+  x: -477,
+  z: -390,
   yaw: 0.83,
   velocityX: 0,
   velocityZ: 0,
-  bodyHeight: terrainHeight(-318, -260) + 1.35,
+  bodyHeight: terrainHeight(-477, -390) + 1.35,
   verticalVelocity: 0,
   pitch: 0,
   roll: 0,
   suspensionTravel: 0,
-  wheelContacts: makeWheelContacts(-318, -260, 0.83),
+  wheelContacts: makeWheelContacts(-477, -390, 0.83),
   airborne: false,
   speed: 0,
   rolloverRisk: 0,
@@ -87,9 +84,6 @@ export const initialVehicleState: VehicleState = {
   rollVelocity: 0,
   pitchVelocity: 0,
   overturned: false,
-  damage: 0,
-  cosmeticDamage: 0,
-  mechanicalDamage: 0,
   recoveryCooldown: 0,
   recoveryPenalty: 0,
 };
@@ -126,8 +120,7 @@ export function updateVehicleState(
   }
 
   const surface = getSurfaceForPoint(state.x, state.z);
-  const damageEffects = calculateDamageEffects(state.mechanicalDamage);
-  const acceleration = vehicle.acceleration * damageEffects.accelerationScale;
+  const acceleration = vehicle.acceleration;
   const traction = clamp(surface.gripMultiplier * (vehicle.grip / 8), p.minTraction, p.maxTraction);
   const forwardX = Math.sin(state.yaw);
   const forwardZ = Math.cos(state.yaw);
@@ -160,7 +153,7 @@ export function updateVehicleState(
     ) * traction;
 
   const gradient = terrainGradient(state.x, state.z);
-  const drag = surface.drag + state.mechanicalDamage * p.damageDragPerPoint + handbrake * p.handbrakeDrag;
+  const drag = surface.drag + handbrake * p.handbrakeDrag;
   // Handbrake reduces lateral grip to allow slides
   const effectiveLateralGrip = lateralGrip * (1 - handbrake * (1 - p.handbrakeLateralGripScale));
 
@@ -230,12 +223,8 @@ export function updateVehicleState(
   }
 
   const suspension = solveSuspension(state, boundedX, boundedZ, velocityX, velocityZ, yaw, vehicle, deltaSeconds);
-  const impactDamage = estimateImpactDamage(state, suspension, speed, vehicle);
   const rolloverRisk = calculateRolloverRisk(state, suspension, sideSpeed, speed, deltaSeconds);
   const rollDynamics = resolveRollDynamics(state, suspension, input, sideSpeed, speed, rolloverRisk, deltaSeconds);
-  const rolloverDamage = rollDynamics.startedFlip ? { cosmetic: 2, mechanical: 1 } : { cosmetic: 0, mechanical: 0 };
-  const cosmeticDamage = clamp(state.cosmeticDamage + impactDamage.cosmetic + rolloverDamage.cosmetic, 0, 100);
-  const mechanicalDamage = clamp(state.mechanicalDamage + impactDamage.mechanical + rolloverDamage.mechanical, 0, 100);
 
   return {
     x: boundedX,
@@ -256,9 +245,6 @@ export function updateVehicleState(
     rollVelocity: rollDynamics.rollVelocity,
     pitchVelocity: rollDynamics.pitchVelocity,
     overturned: rollDynamics.overturned,
-    damage: Math.max(cosmeticDamage, mechanicalDamage),
-    cosmeticDamage,
-    mechanicalDamage,
     recoveryCooldown: Math.max(0, state.recoveryCooldown - deltaSeconds),
     recoveryPenalty: state.recoveryPenalty,
   };
@@ -275,12 +261,6 @@ export function resetVehicleForGateHunt(): VehicleState {
   return {
     ...initialVehicleState,
     wheelContacts: makeWheelContacts(initialVehicleState.x, initialVehicleState.z, initialVehicleState.yaw),
-  };
-}
-
-export function calculateDamageEffects(mechanicalDamage: number) {
-  return {
-    accelerationScale: clamp(1 - mechanicalDamage * 0.0045, 0.55, 1),
   };
 }
 
@@ -318,50 +298,6 @@ function selfRightVehicle(state: VehicleState): VehicleState {
     ...recovered,
     recoveryCooldown: 0.8,
     recoveryPenalty: state.recoveryPenalty,
-  };
-}
-
-function estimateImpactDamage(
-  previous: VehicleState,
-  suspension: ReturnType<typeof solveSuspension>,
-  speed: number,
-  vehicle: VehicleSpec,
-) {
-  const impactSpeed = Math.abs(speed);
-  const previousGround = averageGroundHeight(previous.wheelContacts);
-  const currentGround = averageGroundHeight(suspension.wheelContacts);
-  const terrainStep = Math.abs(currentGround - previousGround);
-  const verticalImpulse = Math.max(0, suspension.verticalVelocity - previous.verticalVelocity);
-  const groundedTerrainHit =
-    !previous.airborne &&
-    impactSpeed >= p.damageMinSpeed &&
-    suspension.suspensionTravel > 0.68 &&
-    verticalImpulse > p.damageVerticalImpulseThreshold;
-  const bottomOut =
-    groundedTerrainHit || previous.airborne ? Math.max(0, suspension.suspensionTravel - p.damageBottomOutThreshold) : 0;
-  const slopeHit = groundedTerrainHit ? Math.max(0, terrainStep - p.damageSlopeHitThreshold) : 0;
-  const hardLanding = previous.airborne ? Math.max(0, -previous.verticalVelocity - p.damageLandingThreshold) : 0;
-
-  if (slopeHit <= 0 && bottomOut <= 0 && hardLanding <= 0) {
-    return { cosmetic: 0, mechanical: 0 };
-  }
-
-  const durabilityScale = clamp(10 / Math.max(vehicle.durability, 1), 0.65, 1.8);
-  const landingSpeed = previous.airborne ? Math.max(impactSpeed, -previous.verticalVelocity * 1.45) : impactSpeed;
-  const speedScale = clamp((landingSpeed - p.damageMinSpeed) / p.damageSpeedRamp, 0.1, 1);
-  const baseDamage =
-    (slopeHit * p.damageSlopeMultiplier +
-      bottomOut * p.damageBottomOutMultiplier +
-      hardLanding * p.damageLandingMultiplier) *
-    landingSpeed *
-    speedScale *
-    durabilityScale *
-    100;
-  const mechanicalSeverity = clamp((baseDamage - 1.8) / 5.4, 0, 1);
-
-  return {
-    cosmetic: Math.min(baseDamage * 1.15, p.damageCosmeticImpactCap),
-    mechanical: Math.min(baseDamage * 0.18 * mechanicalSeverity, p.damageMechanicalImpactCap),
   };
 }
 

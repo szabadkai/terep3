@@ -80,12 +80,12 @@ describe('gate hunt', () => {
     expect(Number.isFinite(next.headingToGate)).toBe(true);
   });
 
-  it('defines a long circuit calibrated around a two-minute run', () => {
+  it('defines a large rally circuit calibrated around a longer run', () => {
     const averageTargetSpeed = getGateCircuitLength() / targetCircuitSeconds;
 
     expect(gateTargets).toHaveLength(9);
-    expect(getGateCircuitLength()).toBeGreaterThan(1900);
-    expect(getGateCircuitLength()).toBeLessThan(2150);
+    expect(getGateCircuitLength()).toBeGreaterThan(2950);
+    expect(getGateCircuitLength()).toBeLessThan(3150);
     expect(averageTargetSpeed).toBeGreaterThan(15);
     expect(averageTargetSpeed).toBeLessThan(18);
   });

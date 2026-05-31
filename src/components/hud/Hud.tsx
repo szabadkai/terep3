@@ -1,4 +1,4 @@
-import { Code2, RotateCcw, Wrench } from 'lucide-react';
+import { Code2, RotateCcw } from 'lucide-react';
 import { formatGateDistance, formatRaceTime, gateTargets, type GateHuntProgress } from '../../game/gateHunt';
 import { featuredMode } from '../../game/modes';
 import { playableHalfSize } from '../../game/terrain';
@@ -13,10 +13,6 @@ type HudProps = {
 export function Hud({ gateHuntProgress, vehicleState, onRetryGateHunt }: HudProps) {
   const gateHeadingStyle = {
     transform: `rotate(${gateHuntProgress.headingToGate}rad)`,
-  };
-  const damagePercent = Math.round(vehicleState.damage);
-  const damageStyle = {
-    width: `${damagePercent}%`,
   };
   const nextGateId = gateTargets[(gateHuntProgress.activeGateIndex + 1) % gateTargets.length].id;
 
@@ -65,23 +61,8 @@ export function Hud({ gateHuntProgress, vehicleState, onRetryGateHunt }: HudProp
           <RouteMap gateHuntProgress={gateHuntProgress} vehicleState={vehicleState} />
           <div className="hud-row__stack">
             {gateHuntProgress.lastRunSeconds !== undefined && (
-              <div className="run-feedback" data-improved={gateHuntProgress.bestTimeImproved ? 'true' : 'false'}>
-                <strong>{gateHuntProgress.bestTimeImproved ? 'Best run' : 'Last run'}</strong>
-                <span>{formatRaceTime(gateHuntProgress.lastRunSeconds)}</span>
-              </div>
+              <RunReview gateHuntProgress={gateHuntProgress} />
             )}
-            <div className="damage-meter" data-severity={getDamageSeverity(vehicleState.mechanicalDamage)}>
-              <div className="damage-meter__label">
-                <span>
-                  <Wrench size={14} />
-                  Damage
-                </span>
-                <strong>{damagePercent}%</strong>
-              </div>
-              <div className="damage-meter__track" aria-label={`Vehicle damage ${damagePercent}%`}>
-                <span className="damage-meter__fill" style={damageStyle} />
-              </div>
-            </div>
           </div>
         </div>
       </section>
@@ -102,6 +83,27 @@ function HudStat({ label, value }: { readonly label: string; readonly value: str
       <small>{label}</small>
       <strong>{value}</strong>
     </span>
+  );
+}
+
+function RunReview({ gateHuntProgress }: { readonly gateHuntProgress: GateHuntProgress }) {
+  return (
+    <details className="run-review" data-improved={gateHuntProgress.bestTimeImproved ? 'true' : 'false'}>
+      <summary>
+        <strong>{gateHuntProgress.bestTimeImproved ? 'Best run' : 'Last run'}</strong>
+        <span>{formatRaceTime(gateHuntProgress.lastRunSeconds)}</span>
+      </summary>
+      {gateHuntProgress.splitTimes && (
+        <ol className="split-list" aria-label="Last run split times">
+          {gateHuntProgress.splitTimes.map((split, index) => (
+            <li key={gateTargets[index].id}>
+              <span>{gateTargets[index].id}</span>
+              <strong>{formatRaceTime(split)}</strong>
+            </li>
+          ))}
+        </ol>
+      )}
+    </details>
   );
 }
 
@@ -155,20 +157,4 @@ function RouteMap({
       </svg>
     </div>
   );
-}
-
-function getDamageSeverity(mechanicalDamage: number) {
-  if (mechanicalDamage >= 90) {
-    return 'critical';
-  }
-
-  if (mechanicalDamage >= 60) {
-    return 'major';
-  }
-
-  if (mechanicalDamage >= 30) {
-    return 'minor';
-  }
-
-  return 'clean';
 }

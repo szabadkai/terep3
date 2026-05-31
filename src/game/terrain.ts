@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import { gateTargets } from './gateHunt';
-import { getSurfaceForPoint, type SurfaceType } from './surfaces';
+import { getSnowRidgeBlend, getSurfaceForPoint, type SurfaceType } from './surfaces';
 
-export const terrainSize = 1300;
-export const playableHalfSize = 560;
+export const terrainSize = 2000;
+export const playableHalfSize = 900;
 
-const segments = 260;
+const segments = 300;
 const waterPlaneBlend = 1;
 const waterPlaneHeight = -2.4;
 
@@ -96,26 +96,22 @@ export function getTerrainPixelColor(x: number, z: number) {
   const surface = getSurfaceForPoint(x, z);
   const routeDistance = distanceToGateRoute(x, z);
   const base = new THREE.Color(surface.color);
-  const cellX = Math.floor((x + terrainSize / 2) / 3.2);
-  const cellZ = Math.floor((z + terrainSize / 2) / 3.2);
-  const noise = seededTerrainNoise(cellX, cellZ);
-  const diagonalBreakup = seededTerrainNoise(cellX + cellZ * 3, cellZ - cellX * 2);
-  const ridgeBreakup = seededTerrainNoise(cellX * 5 - cellZ, cellZ * 7 + cellX);
-  const cellAccent = (cellX + cellZ) % 2 === 0 ? 0.88 : 1.12;
+  const noise = smoothTerrainNoise(x, z, 3.2);
+  const diagonalBreakup = smoothTerrainNoise(x + z * 0.37, z - x * 0.29, 5.6);
+  const ridgeBreakup = smoothTerrainNoise(x * 0.63 - z * 0.21, z * 0.58 + x * 0.17, 9.4);
+  const cellAccent = 0.94 + smoothTerrainNoise(x + 41, z - 29, 6.4) * 0.12;
   const shade = getSurfaceShade(surface.type, noise, diagonalBreakup, ridgeBreakup) * cellAccent;
 
   let tinted = tintSurfaceColor(base, surface.type);
+  const snowBlend = surface.snowBlend ?? getSnowRidgeBlend(x, z);
 
   if (routeDistance < 13 && surface.type !== 'water') {
     const routeBlend = clamp((13 - routeDistance) / 13, 0, 1);
     tinted = tinted.lerp(new THREE.Color(routeDistance < 5.8 ? '#8f7049' : '#a58b5f'), routeBlend * 0.82);
   }
 
-  // Snow transition blending for ridge edges
-  const ridge = Math.sin((x + z) * 0.025);
-  if (surface.type === 'grass' && ridge > 0.65 && z > 2) {
-    const snowBlend = clamp((ridge - 0.65) / 0.1, 0, 1);
-    tinted = tinted.lerp(new THREE.Color('#f5fbf8'), snowBlend * 0.18);
+  if (snowBlend > 0) {
+    tinted = tinted.lerp(new THREE.Color('#f5fbf8'), 0.18 + snowBlend * 0.52);
   }
 
   return tinted.multiplyScalar(shade);
@@ -145,6 +141,10 @@ function distanceToSegment(px: number, pz: number, ax: number, az: number, bx: n
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+function lerp(start: number, end: number, amount: number) {
+  return start + (end - start) * amount;
 }
 
 function tintSurfaceColor(color: THREE.Color, type: SurfaceType) {
@@ -192,6 +192,23 @@ function seededTerrainNoise(x: number, z: number) {
   return value - Math.floor(value);
 }
 
+function smoothTerrainNoise(x: number, z: number, cellSize: number) {
+  const scaledX = (x + terrainSize / 2) / cellSize;
+  const scaledZ = (z + terrainSize / 2) / cellSize;
+  const cellX = Math.floor(scaledX);
+  const cellZ = Math.floor(scaledZ);
+  const amountX = smoothstep(scaledX - cellX);
+  const amountZ = smoothstep(scaledZ - cellZ);
+  const top = lerp(seededTerrainNoise(cellX, cellZ), seededTerrainNoise(cellX + 1, cellZ), amountX);
+  const bottom = lerp(seededTerrainNoise(cellX, cellZ + 1), seededTerrainNoise(cellX + 1, cellZ + 1), amountX);
+
+  return lerp(top, bottom, amountZ);
+}
+
+function smoothstep(value: number) {
+  return value * value * (3 - 2 * value);
+}
+
 export function createGateMarkers() {
   const gateGroup = new THREE.Group();
   const material = new THREE.MeshStandardMaterial({ color: '#f2df8f', roughness: 0.6 });
@@ -230,7 +247,7 @@ export function createSceneryMeshes() {
   const birchMaterial = new THREE.MeshStandardMaterial({ color: '#ccd4c8', roughness: 0.88 });
   const rockMaterial = new THREE.MeshStandardMaterial({ color: '#7e7a70', roughness: 0.95 });
 
-  for (let index = 0; index < 150; index += 1) {
+  for (let index = 0; index < 260; index += 1) {
     const x = seededRange(index, 17, -playableHalfSize + 18, playableHalfSize - 18);
     const z = seededRange(index, 43, -playableHalfSize + 18, playableHalfSize - 18);
 
@@ -242,7 +259,7 @@ export function createSceneryMeshes() {
     scenery.add(tree);
   }
 
-  for (let index = 0; index < 58; index += 1) {
+  for (let index = 0; index < 96; index += 1) {
     const x = seededRange(index, 101, -playableHalfSize + 24, playableHalfSize - 24);
     const z = seededRange(index, 149, -playableHalfSize + 24, playableHalfSize - 24);
 
