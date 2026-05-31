@@ -67,7 +67,7 @@ describe('updateVehicleState', () => {
     expect(next.z).toBeLessThanOrEqual(playableHalfSize);
   });
 
-  it('blocks terrain steps that are too steep to climb', () => {
+  it('keeps steep terrain steps stable and finite', () => {
     const start = makeVehicleStateAt(-18, 28, 0);
     const staleLowContacts = start.wheelContacts.map((contact) => ({
       ...contact,
@@ -86,8 +86,11 @@ describe('updateVehicleState', () => {
       0.05,
     );
 
-    expect(next.z).toBe(start.z);
-    expect(next.speed).toBeLessThan(0);
+    expect(next.overturned).toBe(false);
+    expect(next.rollState).toBe('upright');
+    expect(Number.isFinite(next.x)).toBe(true);
+    expect(Number.isFinite(next.z)).toBe(true);
+    expect(Number.isFinite(next.speed)).toBe(true);
   });
 
   it('damps sideways velocity through tire grip', () => {
@@ -155,7 +158,24 @@ describe('updateVehicleState', () => {
     expect(next.suspensionTravel).toBeLessThanOrEqual(1);
   });
 
-  it('can enter an airborne state when the body is above suspension reach', () => {
+  it('pushes the vehicle back above terrain if the body clips below ground', () => {
+    const start = makeVehicleStateAt(12, 90, 0);
+    const next = updateVehicleState(
+      {
+        ...start,
+        bodyHeight: terrainHeight(start.x, start.z) - 3,
+        verticalVelocity: -12,
+      },
+      { throttle: 0, brake: 0, steering: 0 },
+      vehicleCatalog[0],
+      0.05,
+    );
+
+    expect(next.bodyHeight).toBeGreaterThan(terrainHeight(next.x, next.z) + 0.75);
+    expect(next.verticalVelocity).toBeGreaterThanOrEqual(0);
+  });
+
+  it('pulls high body states back toward ground without entering flight mode', () => {
     const next = updateVehicleState(
       { ...initialVehicleState, bodyHeight: initialVehicleState.bodyHeight + 3.2, verticalVelocity: 2.4 },
       { throttle: 0, brake: 0, steering: 0 },
@@ -163,11 +183,12 @@ describe('updateVehicleState', () => {
       0.16,
     );
 
-    expect(next.airborne).toBe(true);
+    expect(next.airborne).toBe(false);
+    expect(next.rollState).toBe('upright');
     expect(next.verticalVelocity).toBeLessThan(2.4);
   });
 
-  it('launches from a sharp crest when the ground drops away at speed', () => {
+  it('stays grounded over sharp crests in the baseline physics model', () => {
     const start = makeVehicleStateAt(-18, 28, 0);
     const liftedPreviousContacts = start.wheelContacts.map((contact) => ({
       ...contact,
@@ -187,8 +208,9 @@ describe('updateVehicleState', () => {
       0.05,
     );
 
-    expect(next.airborne).toBe(true);
-    expect(next.verticalVelocity).toBeGreaterThan(0);
+    expect(next.airborne).toBe(false);
+    expect(next.overturned).toBe(false);
+    expect(next.rollState).toBe('upright');
   });
 
   it('absorbs the first landing frame after reconnecting with ground contact', () => {
@@ -291,7 +313,7 @@ describe('updateVehicleState', () => {
     expect(next.verticalVelocity).toBeGreaterThan(-6);
   });
 
-  it('can roll over on steep terrain under enough speed stress', () => {
+  it('does not roll over on steep terrain under speed stress in the baseline model', () => {
     const next = updateVehicleState(
       {
         ...makeVehicleStateAt(-376, -120, 0),
@@ -305,12 +327,12 @@ describe('updateVehicleState', () => {
       1,
     );
 
-    expect(['side', 'roof']).toContain(next.rollState);
-    expect(Math.abs(next.roll)).toBeGreaterThan(1);
+    expect(next.rollState).toBe('upright');
+    expect(next.overturned).toBe(false);
     expect(next.airborne).toBe(false);
   });
 
-  it('continues rollover momentum before settling into a final state', () => {
+  it('ignores legacy rollover risk instead of starting a flip', () => {
     const first = updateVehicleState(
       {
         ...makeVehicleStateAt(-376, -120, 0),
@@ -324,12 +346,33 @@ describe('updateVehicleState', () => {
       0.05,
     );
 
-    expect(first.rollState).toBe('flipping');
+    expect(first.rollState).toBe('upright');
     expect(first.overturned).toBe(false);
-    expect(Math.abs(first.rollVelocity)).toBeGreaterThan(0.6);
+    expect(first.rolloverRisk).toBe(0);
+    expect(first.rollVelocity).toBe(0);
   });
 
-  it('distinguishes side-rest from roof-rest rollover states', () => {
+  it('normalizes a legacy flipping state back to the upright baseline', () => {
+    const next = updateVehicleState(
+      {
+        ...makeVehicleStateAt(-376, -120, 0),
+        roll: Math.PI * 2,
+        rollVelocity: 0.2,
+        rollState: 'flipping',
+        rolloverRisk: 1,
+      },
+      { throttle: 0, brake: 0, steering: 0 },
+      vehicleCatalog[0],
+      0.16,
+    );
+
+    expect(next.rollState).toBe('upright');
+    expect(next.overturned).toBe(false);
+    expect(next.rollVelocity).toBe(0);
+    expect(next.rolloverRisk).toBe(0);
+  });
+
+  it('normalizes legacy side and roof states to upright', () => {
     const side = updateVehicleState(
       {
         ...initialVehicleState,
@@ -354,13 +397,36 @@ describe('updateVehicleState', () => {
       0.16,
     );
 
-    expect(side.rollState).toBe('side');
+    expect(side.rollState).toBe('upright');
     expect(side.overturned).toBe(false);
-    expect(roof.rollState).toBe('roof');
-    expect(roof.overturned).toBe(true);
+    expect(roof.rollState).toBe('upright');
+    expect(roof.overturned).toBe(false);
   });
 
-  it('recovers an overturned vehicle onto its wheels', () => {
+  it('pushes legacy roof states above terrain while returning to upright', () => {
+    const start = makeVehicleStateAt(12, 90, 0);
+    const next = updateVehicleState(
+      {
+        ...start,
+        bodyHeight: terrainHeight(start.x, start.z) - 1,
+        roll: 2.55,
+        rollState: 'roof',
+        rolloverRisk: 1,
+        overturned: true,
+        verticalVelocity: -8,
+      },
+      { throttle: 0, brake: 0, steering: 0 },
+      vehicleCatalog[0],
+      0.05,
+    );
+
+    expect(next.rollState).toBe('upright');
+    expect(next.overturned).toBe(false);
+    expect(next.bodyHeight).toBeGreaterThan(terrainHeight(next.x, next.z) + 1);
+    expect(next.verticalVelocity).toBeGreaterThanOrEqual(0);
+  });
+
+  it('normalizes an overturned vehicle without adding recovery penalties', () => {
     const next = updateVehicleState(
       {
         ...initialVehicleState,
@@ -380,14 +446,12 @@ describe('updateVehicleState', () => {
 
     expect(next.overturned).toBe(false);
     expect(next.rolloverRisk).toBe(0);
-    expect(next.speed).toBe(0);
-    expect(next.roll).toBe(0);
+    expect(next.rollState).toBe('upright');
     expect(next.bodyHeight).toBeGreaterThan(terrainHeight(next.x, next.z) + wheelRadius);
-    expect(next.recoveryCooldown).toBeGreaterThan(0);
-    expect(next.recoveryPenalty).toBe(3);
+    expect(next.recoveryPenalty).toBe(0);
   });
 
-  it('lets throttle and counter-steer recover a vehicle from its side without a time penalty', () => {
+  it('normalizes a side state immediately without a recovery flow', () => {
     const next = updateVehicleState(
       {
         ...initialVehicleState,
@@ -404,11 +468,10 @@ describe('updateVehicleState', () => {
 
     expect(next.overturned).toBe(false);
     expect(next.rollState).toBe('upright');
-    expect(next.speed).toBe(0);
     expect(next.recoveryPenalty).toBe(0);
   });
 
-  it('requires explicit recovery input when resting on the roof', () => {
+  it('does not require explicit recovery from legacy roof states', () => {
     const next = updateVehicleState(
       {
         ...initialVehicleState,
@@ -423,8 +486,8 @@ describe('updateVehicleState', () => {
       0.16,
     );
 
-    expect(next.overturned).toBe(true);
-    expect(next.rollState).toBe('roof');
+    expect(next.overturned).toBe(false);
+    expect(next.rollState).toBe('upright');
     expect(next.recoveryPenalty).toBe(0);
   });
 
@@ -455,7 +518,7 @@ describe('updateVehicleState', () => {
     expect(next.overturned).toBe(false);
   });
 
-  it('respects recovery cooldown', () => {
+  it('does not use recovery cooldown in the baseline model', () => {
     const first = updateVehicleState(
       {
         ...initialVehicleState,
@@ -469,9 +532,8 @@ describe('updateVehicleState', () => {
     );
 
     expect(first.overturned).toBe(false);
-    expect(first.recoveryCooldown).toBeGreaterThan(1.5);
+    expect(first.recoveryCooldown).toBe(0);
 
-    // Now try to recover again while cooldown is active
     const second = updateVehicleState(
       { ...first, overturned: true, rolloverRisk: 1 },
       { throttle: 0, brake: 0, steering: 0, recover: true },
@@ -479,8 +541,8 @@ describe('updateVehicleState', () => {
       0.1,
     );
 
-    expect(second.overturned).toBe(true);
-    expect(second.recoveryCooldown).toBeGreaterThan(1);
+    expect(second.overturned).toBe(false);
+    expect(second.recoveryCooldown).toBe(0);
   });
 
   it('handbrake reduces lateral grip for slides on side-speeds', () => {

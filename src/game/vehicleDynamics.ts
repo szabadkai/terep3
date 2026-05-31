@@ -4,15 +4,6 @@ import { playableHalfSize, terrainGradient, terrainHeight } from './terrain';
 import type { VehicleSpec } from './vehicles';
 import { suspensionRestLength, wheelLayout, wheelRadius } from './wheelLayout';
 
-/**
- * Driver control input — read every frame from keyboard or gamepad.
- *
- * - `throttle`: 0-1 forward drive
- * - `brake`: 0-1 braking (reverses when moving slowly backwards / below threshold)
- * - `steering`: -1 left, 0 centre, +1 right
- * - `recover`: flip the vehicle upright when overturned
- * - `handbrake`: 0-1 handbrake for sliding (locks rear wheels)
- */
 export type ControlInput = {
   readonly throttle: number;
   readonly brake: number;
@@ -23,9 +14,6 @@ export type ControlInput = {
 
 export type RollState = 'upright' | 'side' | 'roof' | 'flipping';
 
-/**
- * Full driveable state of the vehicle, suitable for rendering and network sync.
- */
 export type VehicleState = {
   readonly x: number;
   readonly z: number;
@@ -45,15 +33,10 @@ export type VehicleState = {
   readonly rollVelocity: number;
   readonly pitchVelocity: number;
   readonly overturned: boolean;
-  /** Seconds until recovery input is accepted again */
   readonly recoveryCooldown: number;
-  /** Time penalty added to Gate Hunt on recovery */
   readonly recoveryPenalty: number;
 };
 
-/**
- * Per-wheel ground-contact snapshot used by suspension and attitude calculations.
- */
 export type WheelContact = {
   readonly id: string;
   readonly localX: number;
@@ -64,506 +47,277 @@ export type WheelContact = {
   readonly compression: number;
 };
 
-/** Initial vehicle placement near the start area. */
-export const initialVehicleState: VehicleState = {
-  x: -477,
-  z: -390,
-  yaw: 0.83,
-  velocityX: 0,
-  velocityZ: 0,
-  bodyHeight: terrainHeight(-477, -390) + 1.35,
-  verticalVelocity: 0,
-  pitch: 0,
-  roll: 0,
-  suspensionTravel: 0,
-  wheelContacts: makeWheelContacts(-477, -390, 0.83),
-  airborne: false,
-  speed: 0,
-  rolloverRisk: 0,
-  rollState: 'upright',
-  rollVelocity: 0,
-  pitchVelocity: 0,
-  overturned: false,
-  recoveryCooldown: 0,
-  recoveryPenalty: 0,
-};
+const fixedStep = 1 / 60;
+const maxDeltaSeconds = 0.05;
+const rideHeight = wheelRadius + suspensionRestLength;
 
-/**
- * Advances the vehicle simulation by one frame.
- *
- * Order of operations: input → drive forces → kinematics → suspension →
- * rollover → state assembly.
- *
- * Fully deterministic given identical state, input, vehicle spec, and
- * deltaSeconds. Does not use Math.random() or external mutable state.
- *
- * @param state    Previous frame vehicle state.
- * @param input    Driver controls for this frame.
- * @param vehicle  Vehicle specification (mass, grip, suspension, etc.).
- * @param deltaSeconds  Frame duration in seconds.
- * @returns New vehicle state.
- */
+export const initialVehicleState: VehicleState = makeVehicleStateAt(-477, -390, 0.83);
+
 export function updateVehicleState(
   state: VehicleState,
   input: ControlInput,
   vehicle: VehicleSpec,
   deltaSeconds: number,
 ): VehicleState {
-  const currentRollState = getRollState(state);
+  const normalizedState = normalizeState(state);
+  let next = normalizedState;
+  let remaining = clamp(deltaSeconds, 0, maxDeltaSeconds);
 
-  if (currentRollState === 'roof' && state.recoveryCooldown <= 0 && input.recover) {
-    return recoverVehicle(state);
+  while (remaining > 0) {
+    const step = Math.min(remaining, fixedStep);
+    next = updateVehicleSubstep(next, input, vehicle, step);
+    remaining -= step;
   }
 
-  if (currentRollState === 'side' && state.recoveryCooldown <= 0 && wantsSelfRight(input, state.roll)) {
-    return selfRightVehicle(state);
-  }
-
-  const surface = getSurfaceForPoint(state.x, state.z);
-  const acceleration = vehicle.acceleration;
-  const traction = clamp(surface.gripMultiplier * (vehicle.grip / 8), p.minTraction, p.maxTraction);
-  const forwardX = Math.sin(state.yaw);
-  const forwardZ = Math.cos(state.yaw);
-  const rightX = Math.cos(state.yaw);
-  const rightZ = -Math.sin(state.yaw);
-  const forwardSpeed = state.velocityX * forwardX + state.velocityZ * forwardZ;
-  const sideSpeed = state.velocityX * rightX + state.velocityZ * rightZ;
-  const reverseIntent = input.brake > 0 && forwardSpeed < p.reverseSpeedThreshold;
-  const disabledControlScale = currentRollState === 'roof' ? 0 : 1;
-  const handbrake = (input.handbrake ?? 0) * disabledControlScale;
-
-  const brakeForce = reverseIntent ? 0 : input.brake * p.brakeForce;
-  const hillTorque =
-    input.throttle *
-    acceleration *
-    clamp(1 - Math.abs(forwardSpeed) / p.maxHillSpeed, p.minHillSpeedRatio, 1) *
-    p.hillTorqueEfficiency;
-  const driveForce =
-    (input.throttle * acceleration * p.driveMultiplier +
-      hillTorque -
-      Number(reverseIntent) * acceleration * p.reverseMultiplier) *
-    traction *
-    disabledControlScale;
-
-  const lateralGrip =
-    clamp(
-      p.baseLateralGrip + vehicle.grip * p.gripPerStat - Math.abs(forwardSpeed) * p.gripSpeedFalloff,
-      p.minLateralGrip,
-      p.maxLateralGrip,
-    ) * traction;
-
-  const gradient = terrainGradient(state.x, state.z);
-  const drag = surface.drag + handbrake * p.handbrakeDrag;
-  // Handbrake reduces lateral grip to allow slides
-  const effectiveLateralGrip = lateralGrip * (1 - handbrake * (1 - p.handbrakeLateralGripScale));
-
-  let velocityX =
-    state.velocityX +
-    (forwardX * driveForce -
-      forwardX * Math.sign(forwardSpeed) * brakeForce -
-      rightX * sideSpeed * effectiveLateralGrip -
-      gradient.x * p.gradientForce -
-      state.velocityX * drag) *
-      deltaSeconds;
-  let velocityZ =
-    state.velocityZ +
-    (forwardZ * driveForce -
-      forwardZ * Math.sign(forwardSpeed) * brakeForce -
-      rightZ * sideSpeed * effectiveLateralGrip -
-      gradient.z * p.gradientForce -
-      state.velocityZ * drag) *
-      deltaSeconds;
-
-  let speed = Math.hypot(velocityX, velocityZ);
-  let signedSpeed = velocityX * forwardX + velocityZ * forwardZ;
-  const steerSpeedFactor = clamp(speed / p.steerSpeedDivisor, p.steerSpeedMin, 1);
-  const slidePenalty = clamp(1 - Math.abs(sideSpeed) / p.slidePenaltyDivisor, p.slidePenaltyMin, 1);
-  const yaw =
-    state.yaw +
-    input.steering *
-      disabledControlScale *
-      steerSpeedFactor *
-      traction *
-      slidePenalty *
-      Math.sign(signedSpeed || 1) *
-      p.maxSteerAngle *
-      deltaSeconds;
-  const x = state.x + velocityX * deltaSeconds;
-  const z = state.z + velocityZ * deltaSeconds;
-  let boundedX = clamp(x, -playableHalfSize, playableHalfSize);
-  let boundedZ = clamp(z, -playableHalfSize, playableHalfSize);
-
-  if (boundedX !== x) {
-    velocityX *= p.boundaryReflection;
-  }
-
-  if (boundedZ !== z) {
-    velocityZ *= p.boundaryReflection;
-  }
-
-  const climbImpact = calculateClimbImpact(state, boundedX, boundedZ, yaw, speed);
-
-  if (climbImpact.blocked) {
-    boundedX = state.x;
-    boundedZ = state.z;
-    const intoWallSpeed = velocityX * climbImpact.normalX + velocityZ * climbImpact.normalZ;
-
-    if (intoWallSpeed > 0) {
-      const tangentX = velocityX - climbImpact.normalX * intoWallSpeed;
-      const tangentZ = velocityZ - climbImpact.normalZ * intoWallSpeed;
-      velocityX = tangentX * p.climbImpactSlideRetain + climbImpact.normalX * intoWallSpeed * p.climbImpactRetain;
-      velocityZ = tangentZ * p.climbImpactSlideRetain + climbImpact.normalZ * intoWallSpeed * p.climbImpactRetain;
-    } else {
-      velocityX *= p.climbImpactRetain;
-      velocityZ *= p.climbImpactRetain;
-    }
-
-    speed = Math.hypot(velocityX, velocityZ);
-    signedSpeed = velocityX * forwardX + velocityZ * forwardZ;
-  }
-
-  const suspension = solveSuspension(state, boundedX, boundedZ, velocityX, velocityZ, yaw, vehicle, deltaSeconds);
-  const rolloverRisk = calculateRolloverRisk(state, suspension, sideSpeed, speed, deltaSeconds);
-  const rollDynamics = resolveRollDynamics(state, suspension, input, sideSpeed, speed, rolloverRisk, deltaSeconds);
-
-  return {
-    x: boundedX,
-    z: boundedZ,
-    yaw,
-    velocityX,
-    velocityZ,
-    bodyHeight: suspension.bodyHeight,
-    verticalVelocity: suspension.verticalVelocity,
-    pitch: rollDynamics.pitch,
-    roll: rollDynamics.roll,
-    suspensionTravel: suspension.suspensionTravel,
-    wheelContacts: suspension.wheelContacts,
-    airborne: rollDynamics.overturned ? false : suspension.airborne,
-    speed: signedSpeed,
-    rolloverRisk: rollDynamics.rollState === 'upright' ? rolloverRisk : 1,
-    rollState: rollDynamics.rollState,
-    rollVelocity: rollDynamics.rollVelocity,
-    pitchVelocity: rollDynamics.pitchVelocity,
-    overturned: rollDynamics.overturned,
-    recoveryCooldown: Math.max(0, state.recoveryCooldown - deltaSeconds),
-    recoveryPenalty: state.recoveryPenalty,
-  };
+  return next;
 }
 
-/**
- * Returns the current vehicle body height above sea level.
- */
 export function getVehicleAltitude(state: VehicleState) {
   return state.bodyHeight;
 }
 
 export function resetVehicleForGateHunt(): VehicleState {
-  return {
-    ...initialVehicleState,
-    wheelContacts: makeWheelContacts(initialVehicleState.x, initialVehicleState.z, initialVehicleState.yaw),
-  };
+  return makeVehicleStateAt(initialVehicleState.x, initialVehicleState.z, initialVehicleState.yaw);
 }
 
-function recoverVehicle(state: VehicleState): VehicleState {
-  const wheelContacts = makeWheelContacts(state.x, state.z, state.yaw);
-  const averageWheelGround =
-    wheelContacts.reduce((total, contact) => total + contact.groundHeight, 0) / wheelContacts.length;
+function updateVehicleSubstep(
+  state: VehicleState,
+  input: ControlInput,
+  vehicle: VehicleSpec,
+  deltaSeconds: number,
+): VehicleState {
+  const basis = getBasis(state.yaw);
+  const localVelocity = worldToLocal(state.velocityX, state.velocityZ, basis);
+  const surface = getSurfaceForPoint(state.x, state.z);
+  const traction = clamp(surface.gripMultiplier * (vehicle.grip / 8), p.minTraction, p.maxTraction);
+  const reverseIntent = input.brake > 0 && localVelocity.forward < p.reverseSpeedThreshold;
+  const handbrake = clamp(input.handbrake ?? 0, 0, 1);
+  const gradient = terrainGradient(state.x, state.z);
+  const slopeForward = gradient.x * basis.forwardX + gradient.z * basis.forwardZ;
+  const slopeSide = gradient.x * basis.rightX + gradient.z * basis.rightZ;
+  const driveInput = input.throttle - (reverseIntent ? input.brake * p.reverseMultiplier : 0);
+  const driveAcceleration = driveInput * vehicle.acceleration * p.driveMultiplier * traction;
+  const hillAssist =
+    input.throttle *
+    vehicle.acceleration *
+    p.hillTorqueEfficiency *
+    clamp(1 - Math.abs(localVelocity.forward) / p.maxHillSpeed, p.minHillSpeedRatio, 1) *
+    traction;
+  const braking = reverseIntent ? 0 : input.brake * p.brakeForce;
+  const lateralGrip =
+    clamp(
+      p.baseLateralGrip + vehicle.grip * p.gripPerStat - Math.abs(localVelocity.forward) * p.gripSpeedFalloff,
+      p.minLateralGrip,
+      p.maxLateralGrip,
+    ) *
+    traction *
+    (1 - handbrake * (1 - p.handbrakeLateralGripScale));
+  const drag = surface.drag + handbrake * p.handbrakeDrag;
+
+  let forwardSpeed =
+    localVelocity.forward + (driveAcceleration + hillAssist - slopeForward * p.gradientForce) * deltaSeconds;
+  forwardSpeed = applyBraking(forwardSpeed, braking * deltaSeconds);
+  forwardSpeed *= Math.exp(-drag * deltaSeconds);
+
+  let sideSpeed = localVelocity.side - slopeSide * p.gradientForce * deltaSeconds;
+  sideSpeed *= Math.exp(-lateralGrip * deltaSeconds);
+  sideSpeed *= Math.exp(-drag * deltaSeconds);
+
+  const speed = Math.hypot(forwardSpeed, sideSpeed);
+  const steerSpeedFactor = clamp(speed / p.steerSpeedDivisor, p.steerSpeedMin, 1);
+  const slidePenalty = clamp(1 - Math.abs(sideSpeed) / p.slidePenaltyDivisor, p.slidePenaltyMin, 1);
+  const yaw =
+    state.yaw +
+    input.steering *
+      steerSpeedFactor *
+      traction *
+      slidePenalty *
+      Math.sign(forwardSpeed || 1) *
+      p.maxSteerAngle *
+      deltaSeconds;
+  const movedBasis = getBasis(yaw);
+  let velocityX = movedBasis.forwardX * forwardSpeed + movedBasis.rightX * sideSpeed;
+  let velocityZ = movedBasis.forwardZ * forwardSpeed + movedBasis.rightZ * sideSpeed;
+  let x = state.x + velocityX * deltaSeconds;
+  let z = state.z + velocityZ * deltaSeconds;
+
+  const collision = solveTerrainCollision(state, x, z, yaw, velocityX, velocityZ);
+  x = collision.x;
+  z = collision.z;
+  velocityX = collision.velocityX;
+  velocityZ = collision.velocityZ;
+
+  const contact = solveGroundContact(state, x, z, yaw, velocityX, velocityZ, vehicle, deltaSeconds);
+  const signedSpeed = velocityX * movedBasis.forwardX + velocityZ * movedBasis.forwardZ;
 
   return {
-    ...state,
-    velocityX: 0,
-    velocityZ: 0,
-    bodyHeight: averageWheelGround + wheelRadius + suspensionRestLength,
-    verticalVelocity: 0,
-    pitch: 0,
-    roll: 0,
+    x,
+    z,
+    yaw,
+    velocityX,
+    velocityZ,
+    bodyHeight: contact.bodyHeight,
+    verticalVelocity: contact.verticalVelocity,
+    pitch: contact.pitch,
+    roll: contact.roll,
+    suspensionTravel: contact.suspensionTravel,
+    wheelContacts: contact.wheelContacts,
+    airborne: false,
+    speed: signedSpeed,
+    rolloverRisk: 0,
     rollState: 'upright',
     rollVelocity: 0,
     pitchVelocity: 0,
+    overturned: false,
+    recoveryCooldown: Math.max(0, state.recoveryCooldown - deltaSeconds),
+    recoveryPenalty: state.recoveryPenalty,
+  };
+}
+
+function solveTerrainCollision(
+  state: VehicleState,
+  x: number,
+  z: number,
+  yaw: number,
+  velocityX: number,
+  velocityZ: number,
+) {
+  const boundedX = clamp(x, -playableHalfSize, playableHalfSize);
+  const boundedZ = clamp(z, -playableHalfSize, playableHalfSize);
+  let nextVelocityX = boundedX === x ? velocityX : velocityX * p.boundaryReflection;
+  let nextVelocityZ = boundedZ === z ? velocityZ : velocityZ * p.boundaryReflection;
+  const currentGround = averageGroundHeight(state.wheelContacts);
+  const nextContacts = makeWheelContacts(boundedX, boundedZ, yaw);
+  const nextGround = averageGroundHeight(nextContacts);
+
+  if (nextGround - currentGround <= p.maxClimbStep) {
+    return { x: boundedX, z: boundedZ, velocityX: nextVelocityX, velocityZ: nextVelocityZ };
+  }
+
+  const gradient = terrainGradient(boundedX, boundedZ);
+  const normalLength = Math.hypot(gradient.x, gradient.z) || 1;
+  const normalX = gradient.x / normalLength;
+  const normalZ = gradient.z / normalLength;
+  const intoWallSpeed = Math.max(0, nextVelocityX * normalX + nextVelocityZ * normalZ);
+  const tangentX = nextVelocityX - normalX * intoWallSpeed;
+  const tangentZ = nextVelocityZ - normalZ * intoWallSpeed;
+
+  nextVelocityX = tangentX * p.climbImpactSlideRetain + normalX * intoWallSpeed * p.climbImpactRetain;
+  nextVelocityZ = tangentZ * p.climbImpactSlideRetain + normalZ * intoWallSpeed * p.climbImpactRetain;
+
+  return { x: state.x, z: state.z, velocityX: nextVelocityX, velocityZ: nextVelocityZ };
+}
+
+function solveGroundContact(
+  state: VehicleState,
+  x: number,
+  z: number,
+  yaw: number,
+  velocityX: number,
+  velocityZ: number,
+  vehicle: VehicleSpec,
+  deltaSeconds: number,
+) {
+  const wheelContacts = makeWheelContacts(x, z, yaw);
+  const averageWheelGround = averageGroundHeight(wheelContacts);
+  const targetHeight = averageWheelGround + rideHeight;
+  const spring = p.baseSpring + vehicle.suspension * p.springPerStat;
+  const damping = p.baseDamping + vehicle.suspension * p.dampingPerStat;
+  const verticalVelocity =
+    state.verticalVelocity + ((targetHeight - state.bodyHeight) * spring - state.verticalVelocity * damping) * deltaSeconds;
+  const highestWheel = Math.max(...wheelContacts.map((contact) => contact.groundHeight));
+  const lowestHeight = highestWheel + wheelRadius + p.lowestHeightClearance;
+  const bodyHeight = clamp(state.bodyHeight + verticalVelocity * deltaSeconds, lowestHeight, targetHeight + 0.55);
+  const settledVerticalVelocity =
+    bodyHeight <= lowestHeight + 0.001 && verticalVelocity < 0 ? 0 : verticalVelocity;
+  const loadedContacts = wheelContacts.map((contact) => ({
+    ...contact,
+    compression: clamp(targetHeight - bodyHeight + (contact.groundHeight - averageWheelGround), p.compressionMin, p.compressionMax),
+  }));
+  const attitude = calculateContactPlaneAttitude(loadedContacts);
+  const basis = getBasis(yaw);
+  const forwardSpeed = velocityX * basis.forwardX + velocityZ * basis.forwardZ;
+  const pitchTarget = attitude.pitch - clamp(forwardSpeed * p.pitchSpeedDamping, -p.pitchSpeedDampingClamp, p.pitchSpeedDampingClamp);
+  const suspensionTravel =
+    loadedContacts.reduce((total, contact) => total + Math.max(0, contact.compression), 0) / loadedContacts.length;
+
+  return {
+    bodyHeight,
+    verticalVelocity: settledVerticalVelocity,
+    pitch: lerp(state.pitch, pitchTarget, clamp(deltaSeconds * p.pitchLerpRate, 0, 1)),
+    roll: lerp(state.roll, attitude.roll, clamp(deltaSeconds * p.rollLerpRate, 0, 1)),
+    suspensionTravel,
+    wheelContacts: loadedContacts,
+  };
+}
+
+function normalizeState(state: VehicleState): VehicleState {
+  if (
+    state.rollState === 'upright' &&
+    !state.overturned &&
+    !state.airborne &&
+    state.rollVelocity === 0 &&
+    state.pitchVelocity === 0 &&
+    state.rolloverRisk === 0
+  ) {
+    return state;
+  }
+
+  const wheelContacts = makeWheelContacts(state.x, state.z, state.yaw);
+
+  return {
+    ...state,
+    bodyHeight: Math.max(state.bodyHeight, averageGroundHeight(wheelContacts) + rideHeight),
+    verticalVelocity: 0,
+    wheelContacts,
+    airborne: false,
+    rolloverRisk: 0,
+    rollState: 'upright',
+    rollVelocity: 0,
+    pitchVelocity: 0,
+    overturned: false,
+  };
+}
+
+function makeVehicleStateAt(x: number, z: number, yaw: number): VehicleState {
+  const wheelContacts = makeWheelContacts(x, z, yaw);
+
+  return {
+    x,
+    z,
+    yaw,
+    velocityX: 0,
+    velocityZ: 0,
+    bodyHeight: averageGroundHeight(wheelContacts) + rideHeight,
+    verticalVelocity: 0,
+    pitch: 0,
+    roll: 0,
     suspensionTravel: 0,
     wheelContacts,
     airborne: false,
     speed: 0,
     rolloverRisk: 0,
-    overturned: false,
-    recoveryCooldown: 2,
-    recoveryPenalty: state.recoveryPenalty + 3,
-  };
-}
-
-function selfRightVehicle(state: VehicleState): VehicleState {
-  const recovered = recoverVehicle(state);
-
-  return {
-    ...recovered,
-    recoveryCooldown: 0.8,
-    recoveryPenalty: state.recoveryPenalty,
-  };
-}
-
-function wantsSelfRight(input: ControlInput, roll: number) {
-  const steeringIntoUpright = Math.sign(input.steering || 0) === -Math.sign(roll || 1);
-  return input.throttle > 0.2 && steeringIntoUpright;
-}
-
-function calculateClimbImpact(state: VehicleState, x: number, z: number, yaw: number, speed: number) {
-  if (speed < p.climbImpactMinSpeed || state.airborne || getRollState(state) === 'roof') {
-    return { blocked: false, normalX: 0, normalZ: 0 };
-  }
-
-  const previousGround = averageGroundHeight(state.wheelContacts);
-  const nextGround = averageGroundHeight(makeWheelContacts(x, z, yaw));
-  const climbStep = nextGround - previousGround;
-
-  if (climbStep <= p.maxClimbStep) {
-    return { blocked: false, normalX: 0, normalZ: 0 };
-  }
-
-  const gradient = terrainGradient(x, z);
-  const gradientLength = Math.hypot(gradient.x, gradient.z) || 1;
-
-  return {
-    blocked: true,
-    normalX: gradient.x / gradientLength,
-    normalZ: gradient.z / gradientLength,
-  };
-}
-
-function resolveRollDynamics(
-  state: VehicleState,
-  suspension: ReturnType<typeof solveSuspension>,
-  input: ControlInput,
-  sideSpeed: number,
-  speed: number,
-  rolloverRisk: number,
-  deltaSeconds: number,
-) {
-  const previousRollState = getRollState(state);
-  const startedFlip = previousRollState === 'upright' && rolloverRisk >= 1;
-  const rollSign = Math.sign(sideSpeed || suspension.roll || state.roll || 1);
-
-  if (previousRollState === 'roof' && !startedFlip) {
-    return {
-      pitch: lerp(suspension.pitch, Math.sign(suspension.pitch || state.pitch || 1) * p.overturnedPitch, p.overturnedPitchLerp),
-      roll: Math.sign(state.roll || suspension.roll || 1) * p.overturnedRoll,
-      rollState: 'roof' as const,
-      rollVelocity: 0,
-      pitchVelocity: 0,
-      overturned: true,
-      startedFlip: false,
-    };
-  }
-
-  if (startedFlip || previousRollState === 'flipping') {
-    const initialRollVelocity = rollSign * (p.rollMomentumBase + clamp(Math.abs(sideSpeed) / 12, 0, 1.4));
-    const initialPitchVelocity =
-      Math.sign(suspension.pitch || state.pitch || 1) *
-      clamp((Math.abs(suspension.pitch) - p.rolloverPitchThreshold) * p.flipPitchVelocityScale, 0, p.flipPitchVelocityMax);
-    const rawRollVelocity = startedFlip ? initialRollVelocity : state.rollVelocity;
-    const rawPitchVelocity = startedFlip ? initialPitchVelocity : state.pitchVelocity;
-    const damping = Math.max(0, 1 - p.rollMomentumDamping * deltaSeconds);
-    const rollVelocity = rawRollVelocity * damping;
-    const pitchVelocity = rawPitchVelocity * damping;
-    const roll = state.roll + rawRollVelocity * deltaSeconds;
-    const pitch = state.pitch + rawPitchVelocity * deltaSeconds;
-    const normalizedRoll = normalizeAngle(roll);
-    const absRoll = Math.abs(normalizedRoll);
-    const selfRightingInput = wantsSelfRight(input, normalizedRoll);
-
-    if (Math.abs(rollVelocity) > p.rollMomentumSettleVelocity) {
-      return {
-        pitch,
-        roll,
-        rollState: 'flipping' as const,
-        rollVelocity,
-        pitchVelocity,
-        overturned: false,
-        startedFlip,
-      };
-    }
-
-    if (absRoll >= p.roofRollThreshold) {
-      return {
-        pitch: lerp(suspension.pitch, Math.sign(pitch || 1) * p.overturnedPitch, p.overturnedPitchLerp),
-        roll: Math.sign(normalizedRoll || 1) * p.overturnedRoll,
-        rollState: 'roof' as const,
-        rollVelocity: 0,
-        pitchVelocity: 0,
-        overturned: true,
-        startedFlip,
-      };
-    }
-
-    if (absRoll >= p.sideRollThreshold && !selfRightingInput) {
-      return {
-        pitch: lerp(suspension.pitch, pitch, 0.5),
-        roll: Math.sign(normalizedRoll || 1) * p.sideRestRoll,
-        rollState: 'side' as const,
-        rollVelocity: 0,
-        pitchVelocity: 0,
-        overturned: false,
-        startedFlip,
-      };
-    }
-  }
-
-  if (previousRollState === 'side' && !wantsSelfRight(input, state.roll)) {
-    return {
-      pitch: suspension.pitch,
-      roll: Math.sign(state.roll || 1) * p.sideRestRoll,
-      rollState: 'side' as const,
-      rollVelocity: 0,
-      pitchVelocity: 0,
-      overturned: false,
-      startedFlip: false,
-    };
-  }
-
-  return {
-    pitch: suspension.pitch,
-    roll: suspension.roll,
-    rollState: 'upright' as const,
+    rollState: 'upright',
     rollVelocity: 0,
     pitchVelocity: 0,
     overturned: false,
-    startedFlip,
+    recoveryCooldown: 0,
+    recoveryPenalty: 0,
   };
 }
 
-function getRollState(state: VehicleState): RollState {
-  return state.overturned ? 'roof' : (state.rollState ?? 'upright');
-}
-
-function normalizeAngle(angle: number) {
-  return Math.atan2(Math.sin(angle), Math.cos(angle));
-}
-
-function solveSuspension(
-  state: VehicleState,
-  x: number,
-  z: number,
-  velocityX: number,
-  velocityZ: number,
-  yaw: number,
-  vehicle: VehicleSpec,
-  deltaSeconds: number,
-) {
-  const groundHeight = terrainHeight(x, z);
-  const wheelContacts = makeWheelContacts(x, z, yaw);
-  const averageWheelGround = averageGroundHeight(wheelContacts);
-  const targetHeight = averageWheelGround + wheelRadius + suspensionRestLength;
-  const previousAverageWheelGround = averageGroundHeight(state.wheelContacts);
-  const terrainLiftSpeed = (averageWheelGround - previousAverageWheelGround) / Math.max(deltaSeconds, 0.001);
-  const horizontalSpeed = Math.hypot(velocityX, velocityZ);
-  const crestLaunchBoost = shouldLaunchFromCrest(state, targetHeight, terrainLiftSpeed, horizontalSpeed)
-    ? clamp(
-        p.crestLaunchVelocityBoost + (horizontalSpeed - p.crestLaunchMinSpeed) * 0.08,
-        p.crestLaunchVelocityBoost,
-        p.crestLaunchVelocityMax,
-      )
-    : 0;
-  const shouldLoseContact =
-    (state.bodyHeight > targetHeight + p.airborneHeightMargin &&
-      state.verticalVelocity > p.airborneVelocityThreshold &&
-      Math.abs(terrainLiftSpeed) < p.airborneTerrainLiftSpeedCap) ||
-    crestLaunchBoost > 0;
-
-  if (state.airborne || shouldLoseContact) {
-    const launchVelocity = crestLaunchBoost > 0 ? Math.max(state.verticalVelocity, crestLaunchBoost) : state.verticalVelocity;
-    const airborneVelocity = launchVelocity - p.gravity * deltaSeconds;
-    const airborneHeight = state.bodyHeight + airborneVelocity * deltaSeconds;
-    const reconnectHeight = targetHeight + p.reconnectHeightMargin;
-
-    if (airborneHeight > reconnectHeight) {
-      return {
-        bodyHeight: airborneHeight,
-        verticalVelocity: airborneVelocity,
-        pitch: lerp(
-          state.pitch,
-          state.pitch + clamp(velocityZ * p.airborneAttitudeRate, -p.airborneAttitudeClamp, p.airborneAttitudeClamp),
-          clamp(deltaSeconds * p.airborneAttitudeLerpRate, 0, 1),
-        ),
-        roll: lerp(
-          state.roll,
-          state.roll + clamp(velocityX * p.airborneAttitudeRate, -p.airborneAttitudeClamp, p.airborneAttitudeClamp),
-          clamp(deltaSeconds * p.airborneAttitudeLerpRate, 0, 1),
-        ),
-        suspensionTravel: 0,
-        wheelContacts,
-        airborne: true,
-      };
-    }
+function applyBraking(speed: number, amount: number) {
+  if (amount <= 0) {
+    return speed;
   }
 
-  const spring = p.baseSpring + vehicle.suspension * p.springPerStat;
-  const crossAxleDamping = 1 + calculateCrossAxleStress(wheelContacts) * p.crossAxleDampingScale;
-  const landingDamping = state.airborne ? p.landingDampingMultiplier : 1;
-  const damping = (p.baseDamping + vehicle.suspension * p.dampingPerStat) * crossAxleDamping * landingDamping;
-  const previousVerticalVelocity = state.airborne ? state.verticalVelocity * p.landingVelocityRetain : state.verticalVelocity;
-  const verticalVelocity =
-    previousVerticalVelocity +
-    ((targetHeight - state.bodyHeight) * spring -
-      previousVerticalVelocity * damping +
-      Math.max(0, terrainLiftSpeed) * p.terrainLiftTransfer) *
-      deltaSeconds;
-  const lowestAllowedHeight =
-    Math.max(...wheelContacts.map((contact) => contact.groundHeight)) + wheelRadius + p.lowestHeightClearance;
-  const highestAllowedHeight = Math.max(lowestAllowedHeight + p.maxBodyHeightExtra, groundHeight + p.maxBodyHeightAboveGround);
-  const bodyHeight = clamp(state.bodyHeight + verticalVelocity * deltaSeconds, lowestAllowedHeight, highestAllowedHeight);
+  if (Math.abs(speed) <= amount) {
+    return 0;
+  }
 
-  // Anti-roll bar: reduce body-height difference between left and right wheel pairs
-  const antiRollAdjustedHeight = applyAntiRollBar(
-    bodyHeight,
-    targetHeight,
-    wheelContacts,
-    averageWheelGround,
-    wheelRadius,
-    suspensionRestLength,
-  );
-
-  const loadedContacts = wheelContacts.map((contact) => ({
-    ...contact,
-    compression: clamp(targetHeight - antiRollAdjustedHeight + (contact.groundHeight - averageWheelGround), p.compressionMin, p.compressionMax),
-  }));
-  const suspensionTravel =
-    loadedContacts.reduce((total, contact) => total + Math.max(0, contact.compression), 0) / loadedContacts.length;
-  const attitude = calculateContactPlaneAttitude(loadedContacts);
-  const forwardX = Math.sin(yaw);
-  const forwardZ = Math.cos(yaw);
-  const forwardSpeed = velocityX * forwardX + velocityZ * forwardZ;
-  const pitchTarget = attitude.pitch - clamp(forwardSpeed * p.pitchSpeedDamping, -p.pitchSpeedDampingClamp, p.pitchSpeedDampingClamp);
-  const rollTarget = attitude.roll;
-
-  return {
-    bodyHeight: antiRollAdjustedHeight,
-    verticalVelocity,
-    pitch: lerp(state.pitch, pitchTarget, clamp(deltaSeconds * p.pitchLerpRate, 0, 1)),
-    roll: lerp(state.roll, rollTarget, clamp(deltaSeconds * p.rollLerpRate, 0, 1)),
-    suspensionTravel,
-    wheelContacts: loadedContacts,
-    airborne: false,
-  };
+  return speed - Math.sign(speed) * amount;
 }
 
-function shouldLaunchFromCrest(
-  state: VehicleState,
-  targetHeight: number,
-  terrainLiftSpeed: number,
-  horizontalSpeed: number,
-) {
-  return (
-    !state.airborne &&
-    horizontalSpeed >= p.crestLaunchMinSpeed &&
-    terrainLiftSpeed <= -p.crestLaunchDropSpeed &&
-    state.bodyHeight > targetHeight + p.crestLaunchHeightMargin &&
-    state.verticalVelocity > p.airborneVelocityThreshold
-  );
-}
-
-/**
- * Computes pitch and roll from a set of wheel contacts by fitting a plane
- * through all contact points. Pitch is forward-back tilt, roll is side-to-side.
- */
 export function calculateContactPlaneAttitude(contacts: readonly WheelContact[]) {
   const plane = fitContactPlane(contacts);
 
@@ -594,35 +348,16 @@ function averageGroundHeight(contacts: readonly WheelContact[]) {
   return contacts.reduce((total, contact) => total + contact.groundHeight, 0) / contacts.length;
 }
 
-/**
- * Returns the minimum axle-centre height such that a cylindrical tire
- * footprint (sampled as a grid of points) clears the terrain.
- *
- * Used to compute per-wheel ground-contact heights for suspension solving.
- *
- * @param x              Wheel centre X in world space.
- * @param z              Wheel centre Z in world space.
- * @param yaw            Vehicle yaw.
- * @param extraClearance Additional clearance margin (used for tilted wheels).
- * @returns The ground height of the wheel centre.
- */
 export function getWheelContactGroundHeight(x: number, z: number, yaw: number, extraClearance = 0) {
-  const forwardX = Math.sin(yaw);
-  const forwardZ = Math.cos(yaw);
-  const sideX = Math.cos(yaw);
-  const sideZ = -Math.sin(yaw);
-  const halfWidth = p.wheelContactHalfWidth;
-  const forwardSamples = p.wheelContactForwardSamples;
-  const sideSamples = p.wheelContactSideSamples;
-
+  const basis = getBasis(yaw);
   let requiredAxleHeight = Number.NEGATIVE_INFINITY;
 
-  for (const forwardAmount of forwardSamples) {
-    for (const sideAmount of sideSamples) {
+  for (const forwardAmount of p.wheelContactForwardSamples) {
+    for (const sideAmount of p.wheelContactSideSamples) {
       const forwardOffset = forwardAmount * wheelRadius;
-      const sideOffset = sideAmount * halfWidth;
-      const sampleX = x + forwardX * forwardOffset + sideX * sideOffset;
-      const sampleZ = z + forwardZ * forwardOffset + sideZ * sideOffset;
+      const sideOffset = sideAmount * p.wheelContactHalfWidth;
+      const sampleX = x + basis.forwardX * forwardOffset + basis.rightX * sideOffset;
+      const sampleZ = z + basis.forwardZ * forwardOffset + basis.rightZ * sideOffset;
       const tireProfileHeight = Math.sqrt(Math.max(0, wheelRadius * wheelRadius - forwardOffset * forwardOffset));
 
       requiredAxleHeight = Math.max(
@@ -635,67 +370,8 @@ export function getWheelContactGroundHeight(x: number, z: number, yaw: number, e
   return requiredAxleHeight - wheelRadius;
 }
 
-/**
- * Anti-roll bar simulation: applies a corrective force that resists the
- * difference in body height between left and right wheel pairs, without
- * affecting single-wheel bump compliance.
- *
- * The body height is nudged toward the average of left-side height and
- * right-side height by the stiffness factor.
- */
-function applyAntiRollBar(
-  bodyHeight: number,
-  targetHeight: number,
-  contacts: readonly WheelContact[],
-  averageWheelGround: number,
-  radius: number,
-  restLength: number,
-) {
-  if (p.antiRollBarStiffness <= 0) {
-    return bodyHeight;
-  }
-
-  // Compute left-side and right-side ground heights
-  const leftContacts = contacts.filter((c) => c.id.includes('left'));
-  const rightContacts = contacts.filter((c) => c.id.includes('right'));
-
-  if (leftContacts.length === 0 || rightContacts.length === 0) {
-    return bodyHeight;
-  }
-
-  const leftAverage =
-    leftContacts.reduce((total, c) => total + c.groundHeight, 0) / leftContacts.length;
-  const rightAverage =
-    rightContacts.reduce((total, c) => total + c.groundHeight, 0) / rightContacts.length;
-  const leftTarget = leftAverage + radius + restLength;
-  const rightTarget = rightAverage + radius + restLength;
-
-  // Blended target that resists pure side-to-side tilt
-  const antiRollTarget = lerp(targetHeight, (leftTarget + rightTarget) / 2, p.antiRollBarStiffness);
-
-  return lerp(bodyHeight, antiRollTarget, p.antiRollBarStiffness);
-}
-
-function calculateCrossAxleStress(contacts: readonly WheelContact[]) {
-  const frontLeft = contacts.find((contact) => contact.id === 'front-left');
-  const frontRight = contacts.find((contact) => contact.id === 'front-right');
-  const rearLeft = contacts.find((contact) => contact.id === 'rear-left');
-  const rearRight = contacts.find((contact) => contact.id === 'rear-right');
-
-  if (!frontLeft || !frontRight || !rearLeft || !rearRight) {
-    return 0;
-  }
-
-  const diagonalDifference = Math.abs(
-    (frontLeft.groundHeight + rearRight.groundHeight) / 2 -
-      (frontRight.groundHeight + rearLeft.groundHeight) / 2,
-  );
-
-  return Math.max(0, diagonalDifference - p.crossAxleDampingThreshold);
-}
-
 function fitContactPlane(contacts: readonly WheelContact[]) {
-  const averageHeight = contacts.reduce((total, contact) => total + contact.groundHeight, 0) / contacts.length;
+  const averageHeight = averageGroundHeight(contacts);
   const sideNumerator = contacts.reduce(
     (total, contact) => total + contact.localX * (contact.groundHeight - averageHeight),
     0,
@@ -713,50 +389,20 @@ function fitContactPlane(contacts: readonly WheelContact[]) {
   };
 }
 
-function calculateRolloverRisk(
-  previous: VehicleState,
-  suspension: ReturnType<typeof solveSuspension>,
-  sideSpeed: number,
-  speed: number,
-  deltaSeconds: number,
-) {
-  if (previous.overturned) {
-    return 1;
-  }
-
-  const rollStress = Math.max(0, (Math.abs(suspension.roll) - p.rolloverRollThreshold) / p.rolloverRollScale);
-  const pitchStress = Math.max(0, (Math.abs(suspension.pitch) - p.rolloverPitchThreshold) / p.rolloverPitchScale);
-  const lateralStress = Math.max(0, (Math.abs(sideSpeed) - p.rolloverLateralThreshold) / p.rolloverLateralScale);
-  const speedStress = Math.max(0, (speed - p.rolloverSpeedThreshold) / p.rolloverSpeedScale);
-  const staticTipRisk = staticTipOverRisk(suspension);
-  const accumulating =
-    (rollStress * lateralStress * p.rolloverAccumulationMultiplier +
-      pitchStress * speedStress * p.rolloverPitchSpeedMultiplier +
-      staticTipRisk) *
-    deltaSeconds;
-  // Static tip-over suppresses recovery — the vehicle cannot self-right on a steep slope
-  const activeStaticTip = staticTipRisk > 0.02;
-  const recovering =
-    (suspension.airborne ? p.rolloverAirborneRecovery : activeStaticTip ? 0.04 : p.rolloverGroundedRecovery) * deltaSeconds;
-
-  return clamp(previous.rolloverRisk + accumulating - recovering, 0, 1.1);
+function getBasis(yaw: number) {
+  return {
+    forwardX: Math.sin(yaw),
+    forwardZ: Math.cos(yaw),
+    rightX: Math.cos(yaw),
+    rightZ: -Math.sin(yaw),
+  };
 }
 
-/**
- * Detects static tip-over risk when the vehicle is on a steep slope without
- * needing speed. When the contact-plane attitude exceeds safe limits, the
- * vehicle should slowly tip even at rest.
- */
-function staticTipOverRisk(suspension: ReturnType<typeof solveSuspension>) {
-  if (suspension.airborne) {
-    return 0;
-  }
-
-  const maxSafeAngle = 0.18;
-  const rollExcess = Math.max(0, Math.abs(suspension.roll) - maxSafeAngle);
-  const pitchExcess = Math.max(0, Math.abs(suspension.pitch) - maxSafeAngle);
-
-  return (rollExcess * 2.2 + pitchExcess * 1.4) * 0.5;
+function worldToLocal(velocityX: number, velocityZ: number, basis: ReturnType<typeof getBasis>) {
+  return {
+    forward: velocityX * basis.forwardX + velocityZ * basis.forwardZ,
+    side: velocityX * basis.rightX + velocityZ * basis.rightZ,
+  };
 }
 
 function lerp(start: number, end: number, amount: number) {
