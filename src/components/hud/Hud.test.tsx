@@ -14,10 +14,15 @@ describe('Hud', () => {
     expect(screen.getByText(/Run active/)).toBeInTheDocument();
     expect(screen.getByText(/Next B/)).toBeInTheDocument();
     expect(screen.getByLabelText('Mini route map')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Enable music' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Enable SFX' })).toBeInTheDocument();
   });
 
   it('renders active gate feedback and exposes retry', () => {
     const onRetry = vi.fn();
+    const onToggleMusic = vi.fn();
+    const onToggleSfx = vi.fn();
+    const onNextMusicTrack = vi.fn();
 
     render(
       <Hud
@@ -33,6 +38,12 @@ describe('Hud', () => {
         }}
         vehicleState={initialVehicleState}
         onRetryGateHunt={onRetry}
+        musicEnabled
+        sfxEnabled
+        musicTrackLabel="Police Loop"
+        onToggleMusic={onToggleMusic}
+        onToggleSfx={onToggleSfx}
+        onNextMusicTrack={onNextMusicTrack}
       />,
     );
 
@@ -44,7 +55,13 @@ describe('Hud', () => {
     expect(screen.getByText(/Next D/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Retry Gate Hunt' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mute music' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mute SFX' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Next music track: Police Loop' }));
 
     expect(onRetry).toHaveBeenCalledOnce();
+    expect(onToggleMusic).toHaveBeenCalledOnce();
+    expect(onToggleSfx).toHaveBeenCalledOnce();
+    expect(onNextMusicTrack).toHaveBeenCalledOnce();
   });
 });

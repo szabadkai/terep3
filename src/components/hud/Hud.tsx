@@ -1,4 +1,4 @@
-import { Code2, RotateCcw } from 'lucide-react';
+import { Code2, Music2, RotateCcw, SkipForward, Volume2, VolumeX } from 'lucide-react';
 import { formatGateDistance, formatRaceTime, gateTargets, type GateHuntProgress } from '../../game/gateHunt';
 import { featuredMode } from '../../game/modes';
 import { playableHalfSize } from '../../game/terrain';
@@ -8,9 +8,25 @@ type HudProps = {
   readonly gateHuntProgress: GateHuntProgress;
   readonly vehicleState: VehicleState;
   readonly onRetryGateHunt?: () => void;
+  readonly musicEnabled?: boolean;
+  readonly sfxEnabled?: boolean;
+  readonly musicTrackLabel?: string;
+  readonly onToggleMusic?: () => void;
+  readonly onToggleSfx?: () => void;
+  readonly onNextMusicTrack?: () => void;
 };
 
-export function Hud({ gateHuntProgress, vehicleState, onRetryGateHunt }: HudProps) {
+export function Hud({
+  gateHuntProgress,
+  vehicleState,
+  onRetryGateHunt,
+  musicEnabled = false,
+  sfxEnabled = false,
+  musicTrackLabel = 'Music',
+  onToggleMusic,
+  onToggleSfx,
+  onNextMusicTrack,
+}: HudProps) {
   const gateHeadingStyle = {
     transform: `rotate(${gateHuntProgress.headingToGate}rad)`,
   };
@@ -24,6 +40,33 @@ export function Hud({ gateHuntProgress, vehicleState, onRetryGateHunt }: HudProp
           <h1>{featuredMode.label}</h1>
         </div>
         <div className="hud__actions" aria-label="Project links">
+          <button
+            type="button"
+            className="icon-button"
+            aria-label={musicEnabled ? 'Mute music' : 'Enable music'}
+            aria-pressed={musicEnabled}
+            title={musicTrackLabel}
+            onClick={onToggleMusic}
+          >
+            {musicEnabled ? <Music2 size={19} /> : <VolumeX size={19} />}
+          </button>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label={sfxEnabled ? 'Mute SFX' : 'Enable SFX'}
+            aria-pressed={sfxEnabled}
+            onClick={onToggleSfx}
+          >
+            {sfxEnabled ? <Volume2 size={19} /> : <VolumeX size={19} />}
+          </button>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label={`Next music track: ${musicTrackLabel}`}
+            onClick={onNextMusicTrack}
+          >
+            <SkipForward size={19} />
+          </button>
           <a className="icon-button" href="https://github.com/szabadkai/terep3" aria-label="GitHub repository">
             <Code2 size={19} />
           </a>

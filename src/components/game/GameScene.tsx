@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
+import { createGameAudio, musicTracks, type GameAudio } from '../../game/audio';
 import { getGameplayCameraPose, type GameplayCameraView } from '../../game/gameplayCamera';
 import { bindKeyboardControls, readCameraViewInput, readGateHuntRetryInput, readPlayerInput } from '../../game/input';
 import { createGateMarkers, createSceneryMeshes, createTerrainMesh, terrainHeight } from '../../game/terrain';
@@ -23,6 +24,9 @@ type GameSceneProps = {
   readonly onGateHuntProgress?: (progress: GateHuntProgress) => void;
   readonly onVehicleState?: (state: VehicleState) => void;
   readonly gateHuntRetrySignal?: number;
+  readonly musicEnabled?: boolean;
+  readonly sfxEnabled?: boolean;
+  readonly musicTrackIndex?: number;
 };
 
 type RecoveryTransition = {
@@ -31,13 +35,39 @@ type RecoveryTransition = {
   readonly to: VehicleState;
 };
 
-export function GameScene({ onGateHuntProgress, onVehicleState, gateHuntRetrySignal = 0 }: GameSceneProps) {
+export function GameScene({
+  onGateHuntProgress,
+  onVehicleState,
+  gateHuntRetrySignal = 0,
+  musicEnabled = false,
+  sfxEnabled = false,
+  musicTrackIndex = 0,
+}: GameSceneProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const retrySignalRef = useRef(gateHuntRetrySignal);
+  const musicEnabledRef = useRef(musicEnabled);
+  const sfxEnabledRef = useRef(sfxEnabled);
+  const musicTrackIndexRef = useRef(musicTrackIndex);
+  const gameAudioRef = useRef<GameAudio | null>(null);
 
   useEffect(() => {
     retrySignalRef.current = gateHuntRetrySignal;
   }, [gateHuntRetrySignal]);
+
+  useEffect(() => {
+    musicEnabledRef.current = musicEnabled;
+    gameAudioRef.current?.setMusicEnabled(musicEnabled);
+  }, [musicEnabled]);
+
+  useEffect(() => {
+    sfxEnabledRef.current = sfxEnabled;
+    gameAudioRef.current?.setSfxEnabled(sfxEnabled);
+  }, [sfxEnabled]);
+
+  useEffect(() => {
+    musicTrackIndexRef.current = musicTrackIndex;
+    gameAudioRef.current?.setMusicTrackIndex(musicTrackIndex);
+  }, [musicTrackIndex]);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -74,6 +104,12 @@ export function GameScene({ onGateHuntProgress, onVehicleState, gateHuntRetrySig
     const vehicle = createVehicleMesh();
     scene.add(vehicle);
 
+    const gameAudio = createGameAudio(musicTracks);
+    gameAudio.setMusicTrackIndex(musicTrackIndexRef.current);
+    gameAudio.setMusicEnabled(musicEnabledRef.current);
+    gameAudio.setSfxEnabled(sfxEnabledRef.current);
+    gameAudioRef.current = gameAudio;
+
     const cleanupControls = bindKeyboardControls();
     let frameId = 0;
     let previousFrameTime = performance.now();
@@ -101,6 +137,7 @@ export function GameScene({ onGateHuntProgress, onVehicleState, gateHuntRetrySig
       const input = readPlayerInput();
       cameraView = readCameraViewInput() ?? cameraView;
       const previousVehicleState = vehicleState;
+      const previousGateProgress = gateProgress;
       vehicleState = updateVehicleState(vehicleState, input, vehicleCatalog[0], deltaSeconds);
       if (didRecover(previousVehicleState, vehicleState)) {
         recoveryTransition = {
@@ -108,6 +145,7 @@ export function GameScene({ onGateHuntProgress, onVehicleState, gateHuntRetrySig
           from: previousVehicleState,
           to: vehicleState,
         };
+        gameAudio.playRecovery();
       }
       const wantsRetry = readGateHuntRetryInput();
       const didRetry = wantsRetry || retrySignalRef.current !== lastRetrySignal;
@@ -116,6 +154,7 @@ export function GameScene({ onGateHuntProgress, onVehicleState, gateHuntRetrySig
       if (didRetry) {
         vehicleState = resetVehicleForGateHunt();
         recoveryTransition = undefined;
+        gameAudio.playRetry();
       }
 
       const visualVehicleState = resolveVisualVehicleState(vehicleState, recoveryTransition, frameTime);
@@ -129,6 +168,9 @@ export function GameScene({ onGateHuntProgress, onVehicleState, gateHuntRetrySig
       gateProgress = didRetry
         ? resetGateHuntRun(gateProgress, vehicleState)
         : updateGateHuntProgress(gateProgress, vehicleState, deltaSeconds);
+      if (!didRetry) {
+        playGateAudio(gameAudio, previousGateProgress, gateProgress);
+      }
       if (gateProgress.completedRuns > previousCompletedRuns && gateProgress.bestTimeImproved) {
         triggerCompletionCelebration(completionCelebration, vehicleState, frameTime);
       }
@@ -151,6 +193,7 @@ export function GameScene({ onGateHuntProgress, onVehicleState, gateHuntRetrySig
       camera.position.lerp(new THREE.Vector3(...cameraPose.position).add(cameraShake), cameraPose.smoothing);
       camera.lookAt(cameraTarget);
 
+      gameAudio.updateEngine(vehicleState, input, deltaSeconds);
       renderer.render(scene, camera);
       frameId = window.requestAnimationFrame(animate);
     };
@@ -160,6 +203,10 @@ export function GameScene({ onGateHuntProgress, onVehicleState, gateHuntRetrySig
     return () => {
       window.cancelAnimationFrame(frameId);
       cleanupControls();
+      gameAudio.dispose();
+      if (gameAudioRef.current === gameAudio) {
+        gameAudioRef.current = null;
+      }
       resizeObserver.disconnect();
       renderer.dispose();
       mount.removeChild(renderer.domElement);
@@ -167,6 +214,21 @@ export function GameScene({ onGateHuntProgress, onVehicleState, gateHuntRetrySig
   }, [onGateHuntProgress, onVehicleState]);
 
   return <div className="game-scene" ref={mountRef} data-testid="game-scene" />;
+}
+
+function playGateAudio(audio: GameAudio, previous: GateHuntProgress, current: GateHuntProgress) {
+  if (current.gateCooldownSeconds <= 0 || current === previous) {
+    return;
+  }
+
+  if (current.completedRuns > previous.completedRuns) {
+    audio.playCompletion(Boolean(current.bestTimeImproved));
+    return;
+  }
+
+  if (current.gatesCleared > previous.gatesCleared || current.activeGateIndex !== previous.activeGateIndex) {
+    audio.playGateClear(current.gatesCleared, current.totalGates);
+  }
 }
 
 function didRecover(previous: VehicleState, current: VehicleState) {
